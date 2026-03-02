@@ -22,8 +22,8 @@ function formatarMoeda(valor: number) {
 export function DadosExtraidos({ dados }: DadosExtraidosProps) {
   if (!dados) {
     return (
-      <div className="p-4 text-center text-charcoal-400">
-        <Gem size={32} className="mx-auto mb-2 text-charcoal-300" />
+      <div className="p-6 text-center text-gray-400">
+        <img src="/leao.svg" alt="" className="w-12 h-12 mx-auto mb-3 opacity-20" />
         <p className="text-sm">Os dados do cliente serao extraidos automaticamente da conversa</p>
       </div>
     );
@@ -42,22 +42,21 @@ export function DadosExtraidos({ dados }: DadosExtraidosProps) {
 
   return (
     <div className="p-4 space-y-3">
-      <h3 className="text-sm font-semibold text-charcoal-900 uppercase tracking-wider">Dados Extraidos</h3>
       {campos.map((campo) => (
         <div key={campo.label} className="flex items-start gap-3">
-          <campo.icon size={16} className={`mt-0.5 ${campo.valor ? 'text-gold-400' : 'text-charcoal-300'}`} />
+          <campo.icon size={16} className={`mt-0.5 ${campo.valor ? 'text-alisson-600' : 'text-gray-300'}`} />
           <div>
-            <p className="text-xs text-charcoal-500">{campo.label}</p>
-            <p className={`text-sm ${campo.valor ? 'text-charcoal-900 font-medium' : 'text-charcoal-300 italic'}`}>
+            <p className="text-xs text-gray-500">{campo.label}</p>
+            <p className={`text-sm ${campo.valor ? 'text-alisson-600 font-medium' : 'text-gray-300 italic'}`}>
               {campo.valor || 'Nao informado'}
             </p>
           </div>
         </div>
       ))}
       {dados.resumo && (
-        <div className="mt-4 pt-4 border-t border-charcoal-100">
-          <p className="text-xs text-charcoal-500 mb-1">Resumo</p>
-          <p className="text-sm text-charcoal-700">{dados.resumo}</p>
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-1">Resumo</p>
+          <p className="text-sm text-gray-700">{dados.resumo}</p>
         </div>
       )}
     </div>

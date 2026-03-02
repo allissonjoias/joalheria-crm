@@ -65,8 +65,8 @@ export default function Lembretes() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-charcoal-900">Lembretes</h1>
-          <p className="text-charcoal-500 text-sm mt-1">{pendentes.length} pendentes</p>
+          <h1 className="text-2xl font-bold text-alisson-600">Lembretes</h1>
+          <p className="text-gray-500 text-sm mt-1">{pendentes.length} pendentes</p>
         </div>
         <Button onClick={() => setModalAberto(true)}>
           <Plus size={16} /> Novo Lembrete
@@ -74,19 +74,19 @@ export default function Lembretes() {
       </div>
 
       <div className="space-y-3 mb-8">
-        <h2 className="text-sm font-semibold text-charcoal-500 uppercase tracking-wider">Pendentes</h2>
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Pendentes</h2>
         {pendentes.map((l) => (
           <Card key={l.id} className="p-4">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
-                <button onClick={() => handleConcluir(l.id)} className="mt-1 w-5 h-5 border-2 border-charcoal-300 rounded hover:border-gold-400 hover:bg-gold-50 transition-colors flex-shrink-0" />
+                <button onClick={() => handleConcluir(l.id)} className="mt-1 w-5 h-5 border-2 border-gray-300 rounded hover:border-alisson-400 hover:bg-alisson-50 transition-colors flex-shrink-0" />
                 <div>
-                  <h3 className="font-medium text-charcoal-900">{l.titulo}</h3>
-                  <p className="text-sm text-charcoal-500 mt-0.5">{l.cliente_nome}</p>
-                  {l.descricao && <p className="text-sm text-charcoal-600 mt-1">{l.descricao}</p>}
+                  <h3 className="font-medium text-alisson-600">{l.titulo}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{l.cliente_nome}</p>
+                  {l.descricao && <p className="text-sm text-gray-600 mt-1">{l.descricao}</p>}
                   <div className="flex items-center gap-2 mt-2">
-                    <Clock size={14} className={isAtrasado(l.data_lembrete) ? 'text-red-500' : 'text-charcoal-400'} />
-                    <span className={`text-xs ${isAtrasado(l.data_lembrete) ? 'text-red-500 font-medium' : 'text-charcoal-500'}`}>
+                    <Clock size={14} className={isAtrasado(l.data_lembrete) ? 'text-red-500' : 'text-gray-400'} />
+                    <span className={`text-xs ${isAtrasado(l.data_lembrete) ? 'text-red-500 font-medium' : 'text-gray-500'}`}>
                       {new Date(l.data_lembrete).toLocaleDateString('pt-BR')}
                     </span>
                     {isAtrasado(l.data_lembrete) && <Badge cor="red">Atrasado</Badge>}
@@ -94,17 +94,17 @@ export default function Lembretes() {
                 </div>
               </div>
               <button onClick={() => handleExcluir(l.id)} className="p-1 hover:bg-red-50 rounded">
-                <Trash2 size={16} className="text-charcoal-300" />
+                <Trash2 size={16} className="text-gray-300" />
               </button>
             </div>
           </Card>
         ))}
-        {pendentes.length === 0 && <p className="text-charcoal-400 text-sm py-4 text-center">Nenhum lembrete pendente</p>}
+        {pendentes.length === 0 && <p className="text-gray-400 text-sm py-4 text-center">Nenhum lembrete pendente</p>}
       </div>
 
       {concluidos.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-charcoal-500 uppercase tracking-wider">Concluidos</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Concluidos</h2>
           {concluidos.map((l) => (
             <Card key={l.id} className="p-4 opacity-60">
               <div className="flex items-start gap-3">
@@ -112,8 +112,8 @@ export default function Lembretes() {
                   <Check size={12} className="text-white" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-charcoal-900 line-through">{l.titulo}</h3>
-                  <p className="text-sm text-charcoal-500">{l.cliente_nome}</p>
+                  <h3 className="font-medium text-alisson-600 line-through">{l.titulo}</h3>
+                  <p className="text-sm text-gray-500">{l.cliente_nome}</p>
                 </div>
               </div>
             </Card>
@@ -124,16 +124,16 @@ export default function Lembretes() {
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Novo Lembrete">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Cliente</label>
-            <select value={form.cliente_id} onChange={(e) => setForm({...form, cliente_id: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" required>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+            <select value={form.cliente_id} onChange={(e) => setForm({...form, cliente_id: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" required>
               <option value="">Selecionar cliente</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
           <Input label="Titulo" value={form.titulo} onChange={(e) => setForm({...form, titulo: e.target.value})} required />
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Descricao</label>
-            <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" rows={2} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
+            <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" rows={2} />
           </div>
           <Input label="Data" type="date" value={form.data_lembrete} onChange={(e) => setForm({...form, data_lembrete: e.target.value})} required />
           <div className="flex gap-2 justify-end">

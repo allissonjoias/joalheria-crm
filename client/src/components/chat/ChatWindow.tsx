@@ -28,9 +28,9 @@ export function ChatWindow({ mensagens, enviando, onEnviar, ativo }: ChatWindowP
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {mensagens.length === 0 && (
-          <div className="text-center py-12 text-charcoal-400">
+          <div className="text-center py-12 text-gray-400">
             <p className="text-lg mb-2">Inicie a conversa</p>
-            <p className="text-sm">Digite a mensagem do cliente para a Dara responder</p>
+            <p className="text-sm">Digite a mensagem do cliente para a Dara IA responder</p>
           </div>
         )}
         {mensagens.map((msg) => (
@@ -38,11 +38,11 @@ export function ChatWindow({ mensagens, enviando, onEnviar, ativo }: ChatWindowP
         ))}
         {enviando && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-gold-400 flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-alisson-600 flex items-center justify-center">
               <Loader2 size={16} className="text-white animate-spin" />
             </div>
-            <div className="bg-white border border-charcoal-100 px-4 py-3 rounded-2xl rounded-tl-none">
-              <p className="text-sm text-charcoal-400">Dara esta digitando...</p>
+            <div className="bg-white border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-none">
+              <p className="text-sm text-gray-400">Dara IA esta digitando...</p>
             </div>
           </div>
         )}

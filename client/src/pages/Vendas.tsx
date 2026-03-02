@@ -71,8 +71,8 @@ export default function Vendas() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-charcoal-900">Vendas</h1>
-          <p className="text-charcoal-500 text-sm mt-1">{vendas.length} vendas - Total: {formatarMoeda(totalVendas)}</p>
+          <h1 className="text-2xl font-bold text-alisson-600">Vendas</h1>
+          <p className="text-gray-500 text-sm mt-1">{vendas.length} vendas - Total: {formatarMoeda(totalVendas)}</p>
         </div>
         <Button onClick={() => setModalAberto(true)}>
           <Plus size={16} /> Nova Venda
@@ -83,36 +83,36 @@ export default function Vendas() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-charcoal-100">
-                <th className="text-left py-3 px-4 text-sm font-medium text-charcoal-500">Data</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-charcoal-500">Cliente</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-charcoal-500">Produto</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-charcoal-500">Valor</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-charcoal-500">Pagamento</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-charcoal-500">Vendedor</th>
+              <tr className="border-b border-gray-100">
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Cliente</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produto</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Valor</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Pagamento</th>
+                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendedor</th>
               </tr>
             </thead>
             <tbody>
               {vendas.map((v) => (
-                <tr key={v.id} className="border-b border-charcoal-50 hover:bg-charcoal-50">
-                  <td className="py-3 px-4 text-sm text-charcoal-700">{new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-sm font-medium text-charcoal-900">{v.cliente_nome}</td>
-                  <td className="py-3 px-4 text-sm text-charcoal-600">{v.produto_nome || '-'}</td>
+                <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
+                  <td className="py-3 px-4 text-sm text-gray-700">{new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
+                  <td className="py-3 px-4 text-sm font-medium text-alisson-600">{v.cliente_nome}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{v.produto_nome || '-'}</td>
                   <td className="py-3 px-4">
-                    <span className="text-sm font-semibold text-gold-600 flex items-center gap-1">
+                    <span className="text-sm font-semibold text-alisson-600 flex items-center gap-1">
                       <DollarSign size={14} /> {formatarMoeda(v.valor)}
                     </span>
                   </td>
                   <td className="py-3 px-4">
                     {v.metodo_pagamento && <Badge cor="blue">{METODOS[v.metodo_pagamento] || v.metodo_pagamento}</Badge>}
                   </td>
-                  <td className="py-3 px-4 text-sm text-charcoal-600">{v.vendedor_nome || '-'}</td>
+                  <td className="py-3 px-4 text-sm text-gray-600">{v.vendedor_nome || '-'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {vendas.length === 0 && (
-            <div className="text-center py-12 text-charcoal-400">Nenhuma venda registrada</div>
+            <div className="text-center py-12 text-gray-400">Nenhuma venda registrada</div>
           )}
         </div>
       </Card>
@@ -120,15 +120,15 @@ export default function Vendas() {
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Nova Venda">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Cliente</label>
-            <select value={form.cliente_id} onChange={(e) => setForm({...form, cliente_id: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" required>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+            <select value={form.cliente_id} onChange={(e) => setForm({...form, cliente_id: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" required>
               <option value="">Selecionar cliente</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Produto (opcional)</label>
-            <select value={form.produto_id} onChange={(e) => setForm({...form, produto_id: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Produto (opcional)</label>
+            <select value={form.produto_id} onChange={(e) => setForm({...form, produto_id: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
               <option value="">Nenhum produto</option>
               {produtos.map(p => <option key={p.id} value={p.id}>{p.nome} - {formatarMoeda(p.preco)}</option>)}
             </select>
@@ -136,8 +136,8 @@ export default function Vendas() {
           <div className="grid grid-cols-3 gap-4">
             <Input label="Valor" type="number" step="0.01" value={form.valor} onChange={(e) => setForm({...form, valor: e.target.value})} required />
             <div>
-              <label className="block text-sm font-medium text-charcoal-700 mb-1">Pagamento</label>
-              <select value={form.metodo_pagamento} onChange={(e) => setForm({...form, metodo_pagamento: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>
+              <select value={form.metodo_pagamento} onChange={(e) => setForm({...form, metodo_pagamento: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
                 {Object.entries(METODOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             </div>

@@ -7,10 +7,10 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const estilos = {
-  primario: 'bg-gold-400 hover:bg-gold-500 text-white',
-  secundario: 'bg-charcoal-100 hover:bg-charcoal-200 text-charcoal-800',
+  primario: 'bg-alisson-600 hover:bg-alisson-500 text-white',
+  secundario: 'bg-creme-200 hover:bg-creme-300 text-alisson-600',
   perigo: 'bg-red-500 hover:bg-red-600 text-white',
-  ghost: 'hover:bg-charcoal-100 text-charcoal-600',
+  ghost: 'hover:bg-creme-200 text-alisson-600',
 };
 
 const tamanhos = {

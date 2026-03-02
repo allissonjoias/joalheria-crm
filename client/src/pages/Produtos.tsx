@@ -88,7 +88,7 @@ export default function Produtos() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-charcoal-900">Produtos</h1>
+        <h1 className="text-2xl font-bold text-alisson-600">Produtos</h1>
         {isAdmin && (
           <Button onClick={() => { setEditando(null); setForm({ nome: '', descricao: '', categoria: 'aliancas', material: 'Ouro 18k', pedra: '', preco: '', preco_custo: '', estoque: '0' }); setModalAberto(true); }}>
             <Plus size={16} /> Novo Produto
@@ -98,10 +98,10 @@ export default function Produtos() {
 
       <div className="flex gap-4 mb-4">
         <div className="flex-1 relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-charcoal-400" />
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produtos..." className="w-full pl-10 pr-4 py-2.5 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" />
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produtos..." className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" />
         </div>
-        <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="px-4 py-2.5 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400">
+        <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
           <option value="">Todas categorias</option>
           {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
@@ -110,26 +110,26 @@ export default function Produtos() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {produtos.map((p) => (
           <Card key={p.id} className="overflow-hidden">
-            <div className="h-40 bg-charcoal-100 flex items-center justify-center">
-              {p.foto_url ? <img src={p.foto_url} alt={p.nome} className="w-full h-full object-cover" /> : <Package size={40} className="text-charcoal-300" />}
+            <div className="h-40 bg-gray-100 flex items-center justify-center">
+              {p.foto_url ? <img src={p.foto_url} alt={p.nome} className="w-full h-full object-cover" /> : <Package size={40} className="text-gray-300" />}
             </div>
             <div className="p-4">
               <div className="flex items-start justify-between mb-2">
-                <h3 className="font-semibold text-charcoal-900 text-sm">{p.nome}</h3>
+                <h3 className="font-semibold text-alisson-600 text-sm">{p.nome}</h3>
                 {isAdmin && (
                   <div className="flex gap-1">
-                    <button onClick={() => handleEditar(p)} className="p-1 hover:bg-charcoal-100 rounded"><Edit2 size={14} className="text-charcoal-400" /></button>
+                    <button onClick={() => handleEditar(p)} className="p-1 hover:bg-gray-100 rounded"><Edit2 size={14} className="text-gray-400" /></button>
                     <button onClick={() => handleExcluir(p.id)} className="p-1 hover:bg-red-50 rounded"><Trash2 size={14} className="text-red-400" /></button>
                   </div>
                 )}
               </div>
-              {p.descricao && <p className="text-xs text-charcoal-500 mb-2 line-clamp-2">{p.descricao}</p>}
+              {p.descricao && <p className="text-xs text-gray-500 mb-2 line-clamp-2">{p.descricao}</p>}
               <div className="flex items-center gap-2 mb-2">
                 <Badge cor={CAT_CORES[p.categoria] || 'gray'}>{p.categoria}</Badge>
                 {p.pedra && <Badge cor="purple">{p.pedra}</Badge>}
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-lg font-bold text-gold-600">{formatarMoeda(p.preco)}</span>
+                <span className="text-lg font-bold text-alisson-600">{formatarMoeda(p.preco)}</span>
                 <span className={`text-xs ${p.estoque > 0 ? 'text-green-600' : 'text-red-500'}`}>
                   {p.estoque > 0 ? `${p.estoque} em estoque` : 'Sob encomenda'}
                 </span>
@@ -144,13 +144,13 @@ export default function Produtos() {
         <div className="space-y-4">
           <Input label="Nome" value={form.nome} onChange={(e) => setForm({...form, nome: e.target.value})} required />
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Descricao</label>
-            <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" rows={2} />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
+            <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" rows={2} />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-charcoal-700 mb-1">Categoria</label>
-              <select value={form.categoria} onChange={(e) => setForm({...form, categoria: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+              <select value={form.categoria} onChange={(e) => setForm({...form, categoria: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
                 {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>

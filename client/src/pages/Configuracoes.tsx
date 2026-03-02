@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
+import { MetaConfigForm } from '../components/config/MetaConfigForm';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
@@ -73,25 +74,25 @@ export default function Configuracoes() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-charcoal-900 mb-6">Configuracoes</h1>
+      <h1 className="text-2xl font-bold text-alisson-600 mb-6">Configuracoes</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Profile */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-charcoal-900 mb-4 flex items-center gap-2">
-            <Shield size={20} className="text-gold-400" /> Meu Perfil
+          <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
+            <Shield size={20} className="text-alisson-600" /> Meu Perfil
           </h2>
           <div className="space-y-3">
             <div>
-              <p className="text-xs text-charcoal-500">Nome</p>
+              <p className="text-xs text-gray-500">Nome</p>
               <p className="text-sm font-medium">{usuario?.nome}</p>
             </div>
             <div>
-              <p className="text-xs text-charcoal-500">Email</p>
+              <p className="text-xs text-gray-500">Email</p>
               <p className="text-sm font-medium">{usuario?.email}</p>
             </div>
             <div>
-              <p className="text-xs text-charcoal-500">Funcao</p>
+              <p className="text-xs text-gray-500">Funcao</p>
               <Badge cor={usuario?.papel === 'admin' ? 'purple' : 'blue'}>
                 {usuario?.papel === 'admin' ? 'Administrador' : 'Vendedor'}
               </Badge>
@@ -101,8 +102,8 @@ export default function Configuracoes() {
 
         {/* Password change */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-charcoal-900 mb-4 flex items-center gap-2">
-            <Lock size={20} className="text-gold-400" /> Alterar Senha
+          <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
+            <Lock size={20} className="text-alisson-600" /> Alterar Senha
           </h2>
           <div className="space-y-3">
             <Input
@@ -136,8 +137,8 @@ export default function Configuracoes() {
         {isAdmin && (
           <Card className="p-6 lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-charcoal-900 flex items-center gap-2">
-                <Users size={20} className="text-gold-400" /> Usuarios
+              <h2 className="text-lg font-semibold text-alisson-600 flex items-center gap-2">
+                <Users size={20} className="text-alisson-600" /> Usuarios
               </h2>
               <Button tamanho="sm" onClick={() => setModalAberto(true)}>
                 <Plus size={14} /> Novo
@@ -145,10 +146,10 @@ export default function Configuracoes() {
             </div>
             <div className="space-y-3">
               {usuarios.map((u) => (
-                <div key={u.id} className="flex items-center justify-between py-2 border-b border-charcoal-50">
+                <div key={u.id} className="flex items-center justify-between py-2 border-b border-gray-100">
                   <div>
-                    <p className="text-sm font-medium text-charcoal-900">{u.nome}</p>
-                    <p className="text-xs text-charcoal-500">{u.email}</p>
+                    <p className="text-sm font-medium text-alisson-600">{u.nome}</p>
+                    <p className="text-xs text-gray-500">{u.email}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge cor={u.papel === 'admin' ? 'purple' : 'blue'}>{u.papel}</Badge>
@@ -164,6 +165,13 @@ export default function Configuracoes() {
             </div>
           </Card>
         )}
+
+        {/* Meta API Config - admin only */}
+        {isAdmin && (
+          <div className="lg:col-span-2">
+            <MetaConfigForm />
+          </div>
+        )}
       </div>
 
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Novo Usuario">
@@ -172,8 +180,8 @@ export default function Configuracoes() {
           <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} required />
           <Input label="Senha" type="password" value={form.senha} onChange={(e) => setForm({...form, senha: e.target.value})} required />
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Funcao</label>
-            <select value={form.papel} onChange={(e) => setForm({...form, papel: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Funcao</label>
+            <select value={form.papel} onChange={(e) => setForm({...form, papel: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
               <option value="vendedor">Vendedor</option>
               <option value="admin">Administrador</option>
             </select>

@@ -83,7 +83,7 @@ export default function Pipeline() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-charcoal-900">Pipeline de Vendas</h1>
+        <h1 className="text-2xl font-bold text-alisson-600">Pipeline de Vendas</h1>
         <Button onClick={() => setModalAberto(true)}>
           <Plus size={16} /> Novo Deal
         </Button>
@@ -100,10 +100,10 @@ export default function Pipeline() {
                 <div className="mb-3">
                   <div className="flex items-center gap-2 mb-1">
                     <div className={`w-3 h-3 rounded-full ${estagio.cor}`} />
-                    <h3 className="font-semibold text-charcoal-900 text-sm">{estagio.label}</h3>
-                    <span className="text-xs text-charcoal-400 ml-auto">{estagioDeals.length}</span>
+                    <h3 className="font-semibold text-alisson-600 text-sm">{estagio.label}</h3>
+                    <span className="text-xs text-gray-400 ml-auto">{estagioDeals.length}</span>
                   </div>
-                  <p className="text-xs text-charcoal-500">{formatarMoeda(valorTotal)}</p>
+                  <p className="text-xs text-gray-500">{formatarMoeda(valorTotal)}</p>
                 </div>
 
                 <Droppable droppableId={estagio.id}>
@@ -111,7 +111,7 @@ export default function Pipeline() {
                     <div
                       ref={provided.innerRef}
                       {...provided.droppableProps}
-                      className={`min-h-[200px] rounded-xl p-2 space-y-2 transition-colors ${snapshot.isDraggingOver ? 'bg-gold-50' : 'bg-charcoal-50'}`}
+                      className={`min-h-[200px] rounded-xl p-2 space-y-2 transition-colors ${snapshot.isDraggingOver ? 'bg-alisson-50' : 'bg-gray-50'}`}
                     >
                       {estagioDeals.map((deal, index) => (
                         <Draggable key={deal.id} draggableId={deal.id} index={index}>
@@ -120,24 +120,24 @@ export default function Pipeline() {
                               ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`bg-white rounded-lg p-3 border border-charcoal-100 shadow-sm ${snapshot.isDragging ? 'shadow-lg ring-2 ring-gold-400' : ''}`}
+                              className={`bg-white rounded-lg p-3 border border-gray-100 shadow-sm ${snapshot.isDragging ? 'shadow-lg ring-2 ring-alisson-400' : ''}`}
                             >
                               <div className="flex items-start justify-between mb-2">
-                                <h4 className="text-sm font-medium text-charcoal-900">{deal.titulo}</h4>
+                                <h4 className="text-sm font-medium text-alisson-600">{deal.titulo}</h4>
                                 <button onClick={() => handleExcluir(deal.id)} className="p-0.5 hover:bg-red-50 rounded">
-                                  <Trash2 size={12} className="text-charcoal-300" />
+                                  <Trash2 size={12} className="text-gray-300" />
                                 </button>
                               </div>
-                              <p className="text-xs text-charcoal-500 flex items-center gap-1 mb-1">
+                              <p className="text-xs text-gray-500 flex items-center gap-1 mb-1">
                                 <User size={12} /> {deal.cliente_nome}
                               </p>
                               {deal.valor > 0 && (
-                                <p className="text-sm font-semibold text-gold-600 flex items-center gap-1">
+                                <p className="text-sm font-semibold text-alisson-600 flex items-center gap-1">
                                   <DollarSign size={14} /> {formatarMoeda(deal.valor)}
                                 </p>
                               )}
                               {deal.produto_interesse && (
-                                <p className="text-xs text-charcoal-400 mt-1">{deal.produto_interesse}</p>
+                                <p className="text-xs text-gray-400 mt-1">{deal.produto_interesse}</p>
                               )}
                             </div>
                           )}
@@ -156,8 +156,8 @@ export default function Pipeline() {
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Novo Deal">
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-charcoal-700 mb-1">Cliente</label>
-            <select value={form.cliente_id} onChange={(e) => setForm({...form, cliente_id: e.target.value})} className="w-full px-3 py-2 border border-charcoal-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-gold-400" required>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+            <select value={form.cliente_id} onChange={(e) => setForm({...form, cliente_id: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" required>
               <option value="">Selecionar cliente</option>
               {clientes.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>

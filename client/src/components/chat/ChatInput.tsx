@@ -25,19 +25,19 @@ export function ChatInput({ onEnviar, desabilitado }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-t border-charcoal-100 bg-white">
+    <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-t border-gray-100 bg-white">
       <input
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder="Digite a mensagem do cliente..."
-        className="flex-1 px-4 py-3 border border-charcoal-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gold-400 text-sm"
+        className="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm"
         disabled={desabilitado}
       />
       <button
         type="submit"
         disabled={desabilitado || !texto.trim()}
-        className="px-4 py-3 bg-gold-400 hover:bg-gold-500 text-white rounded-xl transition-colors disabled:opacity-50"
+        className="px-4 py-3 bg-alisson-600 hover:bg-alisson-500 text-white rounded-xl transition-colors disabled:opacity-50"
       >
         <Send size={20} />
       </button>

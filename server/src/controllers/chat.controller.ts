@@ -140,4 +140,71 @@ export class ChatController {
       res.status(500).json({ erro: error.message });
     }
   }
+
+  // --- Dara IA Config ---
+
+  obterDaraConfig(_req: Request, res: Response) {
+    try {
+      const db = getDb();
+      const config = db.prepare('SELECT * FROM dara_config LIMIT 1').get() as any;
+      res.json({
+        prompt_personalizado: config?.prompt_personalizado || '',
+      });
+    } catch (error: any) {
+      res.status(500).json({ erro: error.message });
+    }
+  }
+
+  salvarDaraConfig(req: Request, res: Response) {
+    try {
+      const db = getDb();
+      const { prompt_personalizado } = req.body;
+
+      const existing = db.prepare('SELECT id FROM dara_config LIMIT 1').get() as any;
+      if (existing) {
+        db.prepare(
+          "UPDATE dara_config SET prompt_personalizado = ?, atualizado_em = datetime('now') WHERE id = ?"
+        ).run(prompt_personalizado || '', existing.id);
+      } else {
+        db.prepare(
+          'INSERT INTO dara_config (id, prompt_personalizado) VALUES (?, ?)'
+        ).run(uuidv4(), prompt_personalizado || '');
+      }
+
+      res.json({ ok: true });
+    } catch (error: any) {
+      res.status(500).json({ erro: error.message });
+    }
+  }
+
+  // --- Consultar Dara (Q&A para consultoras) ---
+
+  async consultarDara(req: Request, res: Response) {
+    try {
+      const { pergunta, historico } = req.body;
+
+      if (!pergunta) return res.status(400).json({ erro: 'Pergunta e obrigatoria' });
+
+      const messages: MensagemChat[] = [];
+
+      // Include conversation history if provided
+      if (historico && Array.isArray(historico)) {
+        for (const msg of historico) {
+          messages.push({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+          });
+        }
+      }
+
+      // Add current question
+      messages.push({ role: 'user', content: pergunta });
+
+      const resposta = await claudeService.consultarDara(messages);
+      res.json({ resposta });
+    } catch (error: any) {
+      console.error('Erro ao consultar Dara:', error);
+      res.status(500).json({ erro: error.message });
+    }
+  }
 }
