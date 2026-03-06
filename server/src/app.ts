@@ -18,6 +18,8 @@ import metaConfigRoutes from './routes/meta-config.routes';
 import kommoRoutes from './routes/kommo.routes';
 import whatsappRoutes from './routes/whatsapp.routes';
 import sdrAgentRoutes from './routes/sdr-agent.routes';
+import apiKeysRoutes from './routes/api-keys.routes';
+import agentesIaRoutes from './routes/agentes-ia.routes';
 import { WhatsAppController } from './controllers/whatsapp.controller';
 import { EvolutionService } from './services/evolution.service';
 import { sdrScheduler } from './services/sdr-scheduler.service';
@@ -28,6 +30,7 @@ app.use(cors());
 
 // Capture raw body for webhook signature verification
 app.use(express.json({
+  limit: '10mb',
   verify: (req: any, _res, buf) => {
     req.rawBody = buf;
   },
@@ -57,6 +60,17 @@ app.use('/api/config', authMiddleware, metaConfigRoutes);
 app.use('/api/kommo', authMiddleware, kommoRoutes);
 app.use('/api/whatsapp', authMiddleware, whatsappRoutes);
 app.use('/api/sdr-agent', authMiddleware, sdrAgentRoutes);
+app.use('/api/api-keys', authMiddleware, apiKeysRoutes);
+app.use('/api/agentes-ia', authMiddleware, agentesIaRoutes);
+
+// Em producao, servir o frontend buildado
+if (process.env.NODE_ENV === 'production') {
+  const clientDist = path.resolve(__dirname, '../../client/dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // Error handler
 app.use(errorHandler);

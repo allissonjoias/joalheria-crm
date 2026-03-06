@@ -2,7 +2,7 @@ import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
 
-const DB_PATH = path.resolve(__dirname, '../../../data.db');
+const DB_PATH = process.env.DB_PATH || path.resolve(__dirname, '../../../data.db');
 const SCHEMA_PATH = path.resolve(__dirname, '../models/database.sql');
 const SEED_PATH = path.resolve(__dirname, '../models/seed.sql');
 const MIGRATION_META_PATH = path.resolve(__dirname, '../models/migration_meta.sql');
@@ -13,6 +13,9 @@ const MIGRATION_WHATSAPP_MULTI_PATH = path.resolve(__dirname, '../models/migrati
 const MIGRATION_SDR_AGENT_PATH = path.resolve(__dirname, '../models/migration_sdr_agent.sql');
 const MIGRATION_MEDIA_PATH = path.resolve(__dirname, '../models/migration_media.sql');
 const MIGRATION_BANT_PATH = path.resolve(__dirname, '../models/migration_bant.sql');
+const MIGRATION_API_KEYS_PATH = path.resolve(__dirname, '../models/migration_api_keys.sql');
+const MIGRATION_SDR_QUALIFIER_PATH = path.resolve(__dirname, '../models/migration_sdr_qualifier.sql');
+const MIGRATION_AGENTES_IA_PATH = path.resolve(__dirname, '../models/migration_agentes_ia.sql');
 
 let db: SqlJsDatabase | null = null;
 
@@ -29,7 +32,7 @@ export interface DatabaseLike {
   pragma(pragma: string): void;
 }
 
-function saveDb() {
+export function saveDb() {
   if (db) {
     const data = db.export();
     const buffer = Buffer.from(data);
@@ -390,6 +393,114 @@ async function runBantMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
   }
 }
 
+async function runApiKeysMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='api_keys'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration API Keys...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_API_KEYS_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('API Keys migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration API Keys aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration API Keys:', e);
+  }
+}
+
+async function runAgentesIaMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='agentes_ia'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Agentes IA...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_AGENTES_IA_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+          console.error('Migration agentes_ia error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Agentes IA concluida');
+  } catch (e: any) {
+    console.error('Erro na migration Agentes IA:', e.message);
+  }
+}
+
+async function runSdrQualifierMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='sdr_lead_qualificacao'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration SDR Qualificador...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_SDR_QUALIFIER_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('SDR Qualifier migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration SDR Qualificador aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration SDR Qualificador:', e);
+  }
+}
+
 let initPromise: Promise<DatabaseLike> | null = null;
 
 export function initDatabase(): Promise<DatabaseLike> {
@@ -434,6 +545,70 @@ export function initDatabase(): Promise<DatabaseLike> {
     await runSdrAgentMigrations(wrapper, db);
     await runMediaMigrations(wrapper, db);
     await runBantMigrations(wrapper, db);
+    await runApiKeysMigrations(wrapper, db);
+    await runSdrQualifierMigrations(wrapper, db);
+    await runAgentesIaMigrations(wrapper, db);
+
+    // Atualizar modelos descontinuados para versoes atuais
+    try {
+      const oldModels: Record<string, string> = {
+        'claude-sonnet-4-20250514': 'claude-sonnet-4-6',
+        'claude-opus-4-20250514': 'claude-opus-4-6',
+        'gpt-4-turbo': 'gpt-4o',
+      };
+      for (const [old, novo] of Object.entries(oldModels)) {
+        db.exec(`UPDATE api_keys SET modelo = '${novo}' WHERE modelo = '${old}'`);
+      }
+      // Forçar qualquer modelo gemini-2.0 ou gemini-1.x para gemini-2.5-flash
+      db.exec(`UPDATE api_keys SET modelo = 'gemini-2.5-flash' WHERE provider = 'gemini' AND modelo LIKE 'gemini-2.0%'`);
+      db.exec(`UPDATE api_keys SET modelo = 'gemini-2.5-flash' WHERE provider = 'gemini' AND modelo LIKE 'gemini-1%'`);
+      saveDb();
+    } catch (e) { /* tabela pode nao existir */ }
+
+    // Carregar API keys do banco para process.env
+    try {
+      const keys = wrapper.prepare('SELECT provider, api_key, modelo FROM api_keys WHERE api_key != ""').all() as any[];
+      for (const k of keys) {
+        if (k.provider === 'anthropic' && k.api_key) {
+          process.env.CLAUDE_API_KEY = k.api_key;
+          if (k.modelo) process.env.CLAUDE_MODEL = k.modelo;
+        } else if (k.provider === 'openai' && k.api_key) {
+          process.env.OPENAI_API_KEY = k.api_key;
+        } else if (k.provider === 'gemini' && k.api_key) {
+          process.env.GEMINI_API_KEY = k.api_key;
+        }
+      }
+    } catch (e) { /* tabela pode nao existir ainda */ }
+
+    // Add prompt_personalizado column to sdr_agent_config if missing
+    try {
+      const sdrCols = wrapper.prepare("PRAGMA table_info(sdr_agent_config)").all() as any[];
+      if (sdrCols.length > 0 && !sdrCols.some((c: any) => c.name === 'prompt_personalizado')) {
+        db.exec("ALTER TABLE sdr_agent_config ADD COLUMN prompt_personalizado TEXT DEFAULT ''");
+        saveDb();
+        console.log('Coluna prompt_personalizado adicionada ao sdr_agent_config');
+      }
+      if (sdrCols.length > 0 && !sdrCols.some((c: any) => c.name === 'sdr_auto_responder')) {
+        db.exec("ALTER TABLE sdr_agent_config ADD COLUMN sdr_auto_responder INTEGER DEFAULT 0");
+        saveDb();
+        console.log('Coluna sdr_auto_responder adicionada ao sdr_agent_config');
+      }
+      if (sdrCols.length > 0 && !sdrCols.some((c: any) => c.name === 'prompt_dara_sdr')) {
+        db.exec("ALTER TABLE sdr_agent_config ADD COLUMN prompt_dara_sdr TEXT DEFAULT ''");
+        saveDb();
+        console.log('Coluna prompt_dara_sdr adicionada ao sdr_agent_config');
+      }
+    } catch (e) { /* already exists */ }
+
+    // Add selecionado column to api_keys if missing
+    try {
+      const apiKeysCols = wrapper.prepare("PRAGMA table_info(api_keys)").all() as any[];
+      if (apiKeysCols.length > 0 && !apiKeysCols.some((c: any) => c.name === 'selecionado')) {
+        db.exec("ALTER TABLE api_keys ADD COLUMN selecionado INTEGER DEFAULT 0");
+        saveDb();
+        console.log('Coluna selecionado adicionada ao api_keys');
+      }
+    } catch (e) { /* already exists */ }
 
     // Auto-save every 5 seconds
     if (!saveTimer) {

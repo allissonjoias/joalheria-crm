@@ -11,21 +11,48 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 }
 
 const MIME_TO_EXT: Record<string, string> = {
+  // Imagens
   'image/jpeg': '.jpg',
   'image/png': '.png',
   'image/webp': '.webp',
   'image/gif': '.gif',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'image/bmp': '.bmp',
+  'image/svg+xml': '.svg',
+  // Audio
   'audio/ogg': '.ogg',
   'audio/mpeg': '.mp3',
+  'audio/mp3': '.mp3',
   'audio/mp4': '.m4a',
   'audio/webm': '.webm',
   'audio/opus': '.opus',
+  'audio/wav': '.wav',
+  'audio/x-wav': '.wav',
+  'audio/aac': '.aac',
+  'audio/x-m4a': '.m4a',
+  'audio/flac': '.flac',
+  // Video
   'video/mp4': '.mp4',
   'video/3gpp': '.3gp',
   'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/x-msvideo': '.avi',
+  'video/x-matroska': '.mkv',
+  // Documentos
+  'application/pdf': '.pdf',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'text/plain': '.txt',
+  'text/csv': '.csv',
+  'application/zip': '.zip',
+  'application/x-rar-compressed': '.rar',
+  'application/octet-stream': '.bin',
 };
-
-const ALLOWED_MIMES = Object.keys(MIME_TO_EXT);
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -37,16 +64,11 @@ const storage = multer.diskStorage({
   },
 });
 
+// Aceitar qualquer tipo - nao bloquear no fileFilter
+// A validacao de tipo fica no controller se necessario
 export const upload = multer({
   storage,
-  limits: { fileSize: 16 * 1024 * 1024 }, // 16MB
-  fileFilter: (_req, file, cb) => {
-    if (ALLOWED_MIMES.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`Tipo de arquivo não permitido: ${file.mimetype}`));
-    }
-  },
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB (video pode ser grande)
 });
 
-export { UPLOADS_DIR };
+export { UPLOADS_DIR, MIME_TO_EXT };

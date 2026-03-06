@@ -14,6 +14,7 @@ interface SdrConfig {
   deadline_primeiro_contato: number;
   deadline_followup: number;
   deadline_pos_venda: number;
+  prompt_personalizado: string;
   ultimo_polling: string | null;
 }
 

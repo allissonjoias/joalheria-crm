@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS sdr_agent_config (
   deadline_primeiro_contato INTEGER DEFAULT 4,
   deadline_followup INTEGER DEFAULT 24,
   deadline_pos_venda INTEGER DEFAULT 168,
+  prompt_personalizado TEXT DEFAULT '',
   ultimo_polling TEXT,
   criado_em TEXT DEFAULT (datetime('now')),
   atualizado_em TEXT DEFAULT (datetime('now'))

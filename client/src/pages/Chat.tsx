@@ -137,7 +137,7 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[calc(100vh-7rem)]">
+    <div className="h-full">
       {/* Header com tabs */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex gap-1 bg-white rounded-lg border border-gray-200 p-1">

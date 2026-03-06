@@ -1,5 +1,24 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../config/database';
+import fs from 'fs';
+import path from 'path';
+
+const MCP_CONFIG_PATH = path.resolve(__dirname, '../../../../kommo-mcp-server/config.json');
+
+function syncMcpConfig(accessToken: string, refreshToken: string, expiresAt: string) {
+  try {
+    if (!fs.existsSync(MCP_CONFIG_PATH)) return;
+    const raw = fs.readFileSync(MCP_CONFIG_PATH, 'utf-8');
+    const cfg = JSON.parse(raw);
+    cfg.access_token = accessToken;
+    cfg.refresh_token = refreshToken;
+    cfg.token_expires_at = expiresAt;
+    fs.writeFileSync(MCP_CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf-8');
+    console.log('[Kommo] MCP config.json sincronizado com novos tokens.');
+  } catch (e: any) {
+    console.warn('[Kommo] Nao foi possivel sincronizar MCP config.json:', e.message);
+  }
+}
 
 interface KommoConfig {
   id: string;
@@ -87,6 +106,16 @@ export class KommoService {
     }
   }
 
+  saveToken(accessToken: string, expiresAt?: string) {
+    const db = getDb();
+    const config = this.getConfig();
+    if (!config) throw new Error('Kommo nao configurado');
+
+    db.prepare(
+      `UPDATE kommo_config SET access_token = ?, token_expires_at = ?, atualizado_em = datetime('now') WHERE id = ?`
+    ).run(accessToken, expiresAt || new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(), config.id);
+  }
+
   private baseUrl(): string {
     const config = this.getConfig();
     return `https://${config?.subdomain || 'alissonjoiass'}.kommo.com`;
@@ -127,6 +156,7 @@ export class KommoService {
     db.prepare(
       `UPDATE kommo_config SET access_token = ?, refresh_token = ?, token_expires_at = ?, atualizado_em = datetime('now') WHERE id = ?`
     ).run(data.access_token, data.refresh_token, expiresAt, config.id);
+    syncMcpConfig(data.access_token, data.refresh_token, expiresAt);
   }
 
   async refreshToken(): Promise<string> {
@@ -157,6 +187,7 @@ export class KommoService {
     db.prepare(
       `UPDATE kommo_config SET access_token = ?, refresh_token = ?, token_expires_at = ?, atualizado_em = datetime('now') WHERE id = ?`
     ).run(data.access_token, data.refresh_token, expiresAt, config.id);
+    syncMcpConfig(data.access_token, data.refresh_token, expiresAt);
 
     return data.access_token;
   }
@@ -327,5 +358,57 @@ export class KommoService {
         params: { text: texto },
       },
     ]);
+  }
+
+  async buscarContatoPorTelefone(telefone: string): Promise<any> {
+    const phoneNorm = telefone.replace(/\D/g, '');
+    const data = await this.apiGet('/contacts', {
+      query: phoneNorm.slice(-11),
+      limit: 5,
+    });
+    return data?._embedded?.contacts || [];
+  }
+
+  async buscarLeadPorContato(contatoId: number): Promise<any> {
+    const data = await this.apiGet(`/contacts/${contatoId}`, { with: 'leads' });
+    return data?._embedded?.leads || data?.leads || [];
+  }
+
+  async atualizarCustomFieldsLead(leadId: number, fields: { field_id: number; values: any[] }[]): Promise<any> {
+    return this.apiPatch(`/leads/${leadId}`, {
+      custom_fields_values: fields,
+    });
+  }
+
+  async buscarTelefoneDoLead(leadId: number): Promise<string | null> {
+    try {
+      // Buscar lead com contatos embutidos
+      const leadData = await this.apiGet(`/leads/${leadId}`, { with: 'contacts' });
+      const contatos = leadData?._embedded?.contacts || [];
+
+      for (const contatoRef of contatos) {
+        // Buscar contato completo com campos personalizados
+        const contato = await this.apiGet(`/contacts/${contatoRef.id}`, {});
+        const campos = contato?.custom_fields_values || [];
+
+        for (const campo of campos) {
+          if (
+            campo.field_code === 'PHONE' ||
+            campo.field_type === 'multitext' ||
+            String(campo.field_name || '').toLowerCase().includes('telefone') ||
+            String(campo.field_name || '').toLowerCase().includes('phone')
+          ) {
+            const valores = campo.values || [];
+            for (const v of valores) {
+              const tel = String(v.value || '').replace(/\D/g, '');
+              if (tel.length >= 10) return tel;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Kommo] Erro ao buscar telefone do lead:', e);
+    }
+    return null;
   }
 }

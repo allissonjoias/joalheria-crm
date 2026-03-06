@@ -66,6 +66,19 @@ export class KommoController {
     }
   }
 
+  // POST /api/kommo/token
+  salvarToken(req: Request, res: Response) {
+    try {
+      const { access_token, expires_at } = req.body;
+      if (!access_token) return res.status(400).json({ erro: 'access_token obrigatorio' });
+
+      kommoService.saveToken(access_token, expires_at);
+      res.json({ ok: true, mensagem: 'Token salvo com sucesso' });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
   // POST /api/kommo/testar
   async testar(_req: Request, res: Response) {
     try {

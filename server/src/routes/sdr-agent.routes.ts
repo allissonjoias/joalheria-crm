@@ -22,5 +22,8 @@ router.get('/logs/stats', adminOnly, (req, res) => controller.obterStats(req, re
 router.post('/polling', adminOnly, (req, res) => controller.executarPolling(req, res));
 router.post('/resumo', adminOnly, (req, res) => controller.enviarResumo(req, res));
 router.post('/testar-notificacao', adminOnly, (req, res) => controller.testarNotificacao(req, res));
+router.post('/simular', adminOnly, (req, res) => controller.simularConversa(req, res));
+router.get('/prompt-dara', adminOnly, (req, res) => controller.obterPromptDara(req, res));
+router.put('/prompt-dara', adminOnly, (req, res) => controller.salvarPromptDara(req, res));
 
 export default router;

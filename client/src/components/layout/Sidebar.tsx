@@ -1,20 +1,19 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, Inbox, MessageSquare, Users, Package,
-  Kanban, DollarSign, Bell, Settings, Download, Smartphone, Bot
+  LayoutDashboard, Inbox, Users, Package,
+  Kanban, DollarSign, Bell, Settings, Download, Smartphone, Bot,
 } from 'lucide-react';
 
 const menuItems = [
   { to: '/', icon: LayoutDashboard, label: 'Painel' },
   { to: '/mensagens', icon: Inbox, label: 'WhatsAlisson' },
-  { to: '/chat', icon: MessageSquare, label: 'Dara IA' },
+  { to: '/agentes-ia', icon: Bot, label: 'Agentes de AI' },
   { to: '/clientes', icon: Users, label: 'Clientes' },
   { to: '/produtos', icon: Package, label: 'Produtos' },
   { to: '/pipeline', icon: Kanban, label: 'Pipeline' },
   { to: '/vendas', icon: DollarSign, label: 'Vendas' },
   { to: '/lembretes', icon: Bell, label: 'Lembretes' },
   { to: '/whatsapp', icon: Smartphone, label: 'WhatsApp' },
-  { to: '/sdr-agent', icon: Bot, label: 'Agente SDR' },
   { to: '/importar', icon: Download, label: 'Importar Kommo' },
   { to: '/configuracoes', icon: Settings, label: 'Configuracoes' },
 ];

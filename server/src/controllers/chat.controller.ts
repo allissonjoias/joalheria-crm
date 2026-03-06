@@ -177,6 +177,28 @@ export class ChatController {
     }
   }
 
+  // --- Testar Prompt (simula atendimento ao cliente) ---
+
+  async testarPrompt(req: Request, res: Response) {
+    try {
+      const { historico } = req.body;
+      if (!historico || !Array.isArray(historico) || historico.length === 0) {
+        return res.status(400).json({ erro: 'Historico e obrigatorio' });
+      }
+
+      const messages: MensagemChat[] = historico.map((m: any) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      const resposta = await claudeService.enviarMensagem(messages);
+      res.json({ resposta });
+    } catch (error: any) {
+      console.error('Erro ao testar prompt:', error);
+      res.status(500).json({ erro: error.message });
+    }
+  }
+
   // --- Consultar Dara (Q&A para consultoras) ---
 
   async consultarDara(req: Request, res: Response) {

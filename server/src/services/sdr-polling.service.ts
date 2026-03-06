@@ -15,6 +15,7 @@ interface SdrConfig {
   deadline_pos_venda: number;
   cron_resumo_manha: string;
   cron_resumo_tarde: string;
+  prompt_personalizado: string;
   ultimo_polling: string | null;
 }
 
@@ -38,7 +39,7 @@ export class SdrPollingService {
       'ativo', 'telefone_admin', 'intervalo_polling', 'dias_inatividade',
       'auto_criar_tasks', 'auto_followup', 'auto_mover_leads',
       'deadline_primeiro_contato', 'deadline_followup', 'deadline_pos_venda',
-      'cron_resumo_manha', 'cron_resumo_tarde',
+      'cron_resumo_manha', 'cron_resumo_tarde', 'prompt_personalizado',
     ];
 
     for (const campo of permitidos) {

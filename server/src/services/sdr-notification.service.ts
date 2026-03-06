@@ -2,8 +2,7 @@ import { EvolutionService } from './evolution.service';
 import { SdrEvento } from './sdr-event-detector.service';
 import { SdrPollingService } from './sdr-polling.service';
 import { getDb } from '../config/database';
-import { env } from '../config/env';
-import Anthropic from '@anthropic-ai/sdk';
+import { ClaudeService } from './claude.service';
 import { getResumoManhaPrompt, getResumoTardePrompt } from '../utils/sdr-prompt';
 
 export class SdrNotificationService {
@@ -78,22 +77,12 @@ ${logsRecentes.map((l: any) => `- [${l.tipo}] ${l.descricao}`).join('\n') || 'Ne
 
     let resumoTexto: string;
 
+    const claudeService = new ClaudeService();
+    const prompt = tipo === 'manha' ? getResumoManhaPrompt(dadosResumo) : getResumoTardePrompt(dadosResumo);
     try {
-      if (!env.CLAUDE_API_KEY) throw new Error('Sem API key');
-
-      const anthropic = new Anthropic({ apiKey: env.CLAUDE_API_KEY });
-      const prompt = tipo === 'manha' ? getResumoManhaPrompt(dadosResumo) : getResumoTardePrompt(dadosResumo);
-
-      const response = await anthropic.messages.create({
-        model: env.CLAUDE_MODEL,
-        max_tokens: 300,
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const textBlock = response.content.find(b => b.type === 'text');
-      resumoTexto = textBlock?.text || this.gerarResumoFallback(tipo, stats, logsRecentes);
+      resumoTexto = await claudeService.gerarTexto(prompt, 300);
     } catch (e) {
-      console.error('[SDR] Erro ao gerar resumo via Claude, usando fallback:', e);
+      console.error('[SDR] Erro ao gerar resumo via IA, usando fallback:', e);
       resumoTexto = this.gerarResumoFallback(tipo, stats, logsRecentes);
     }
 
@@ -135,9 +124,12 @@ ${logsRecentes.map((l: any) => `- [${l.tipo}] ${l.descricao}`).join('\n') || 'Ne
   private marcarNotificado(evento: SdrEvento): void {
     if (!evento.leadId) return;
     const db = getDb();
-    db.prepare(
-      "UPDATE sdr_agent_log SET notificado = 1 WHERE lead_id = ? AND tipo = ? AND notificado = 0 ORDER BY criado_em DESC LIMIT 1"
-    ).run(evento.leadId, evento.tipo);
+    const row = db.prepare(
+      "SELECT id FROM sdr_agent_log WHERE lead_id = ? AND tipo = ? AND notificado = 0 ORDER BY criado_em DESC LIMIT 1"
+    ).get(evento.leadId, evento.tipo) as any;
+    if (row) {
+      db.prepare("UPDATE sdr_agent_log SET notificado = 1 WHERE id = ?").run(row.id);
+    }
   }
 
   private delay(ms: number): Promise<void> {

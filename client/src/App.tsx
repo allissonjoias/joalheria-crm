@@ -1,9 +1,8 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { Layout } from './components/layout/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import Chat from './pages/Chat';
 import Mensageria from './pages/Mensageria';
 import Clientes from './pages/Clientes';
 import Produtos from './pages/Produtos';
@@ -13,7 +12,7 @@ import Lembretes from './pages/Lembretes';
 import Configuracoes from './pages/Configuracoes';
 import ImportarKommo from './pages/ImportarKommo';
 import WhatsAppPage from './pages/WhatsApp';
-import SdrAgent from './pages/SdrAgent';
+import AgentesIA from './pages/AgentesIA';
 
 export default function App() {
   return (
@@ -24,7 +23,7 @@ export default function App() {
           <Route element={<Layout />}>
             <Route path="/" element={<Dashboard />} />
             <Route path="/mensagens" element={<Mensageria />} />
-            <Route path="/chat" element={<Chat />} />
+            <Route path="/agentes-ia" element={<AgentesIA />} />
             <Route path="/clientes" element={<Clientes />} />
             <Route path="/produtos" element={<Produtos />} />
             <Route path="/pipeline" element={<Pipeline />} />
@@ -33,7 +32,11 @@ export default function App() {
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/importar" element={<ImportarKommo />} />
             <Route path="/whatsapp" element={<WhatsAppPage />} />
-            <Route path="/sdr-agent" element={<SdrAgent />} />
+            {/* Redirects para URLs antigas */}
+            <Route path="/chat" element={<Navigate to="/agentes-ia" replace />} />
+            <Route path="/sdr-agent" element={<Navigate to="/agentes-ia" replace />} />
+            <Route path="/sdr-simulador" element={<Navigate to="/agentes-ia" replace />} />
+            <Route path="/prompt-lab" element={<Navigate to="/agentes-ia" replace />} />
           </Route>
         </Routes>
       </AuthProvider>
