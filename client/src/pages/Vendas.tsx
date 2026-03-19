@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
+import { Tooltip } from '../components/ui/Tooltip';
 import api from '../services/api';
 
 interface Venda {
@@ -74,9 +75,11 @@ export default function Vendas() {
           <h1 className="text-2xl font-bold text-alisson-600">Vendas</h1>
           <p className="text-gray-500 text-sm mt-1">{vendas.length} vendas - Total: {formatarMoeda(totalVendas)}</p>
         </div>
-        <Button onClick={() => setModalAberto(true)}>
-          <Plus size={16} /> Nova Venda
-        </Button>
+        <Tooltip texto="Registrar uma venda manualmente com cliente, produto e forma de pagamento" posicao="left">
+          <Button onClick={() => setModalAberto(true)}>
+            <Plus size={16} /> Nova Venda
+          </Button>
+        </Tooltip>
       </div>
 
       <Card>
@@ -84,12 +87,12 @@ export default function Vendas() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Cliente</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produto</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Valor</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Pagamento</th>
-                <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendedor</th>
+                <Tooltip texto="Data em que a venda foi realizada" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th></Tooltip>
+                <Tooltip texto="Nome do cliente que realizou a compra" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Cliente</th></Tooltip>
+                <Tooltip texto="Produto vendido (pode ser vazio em vendas sob encomenda)" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produto</th></Tooltip>
+                <Tooltip texto="Valor total da venda em reais" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Valor</th></Tooltip>
+                <Tooltip texto="Forma de pagamento utilizada: PIX, cartao, dinheiro" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Pagamento</th></Tooltip>
+                <Tooltip texto="Vendedor responsavel pela venda" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendedor</th></Tooltip>
               </tr>
             </thead>
             <tbody>

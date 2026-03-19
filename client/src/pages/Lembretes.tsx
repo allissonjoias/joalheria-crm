@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
+import { Tooltip } from '../components/ui/Tooltip';
 import api from '../services/api';
 
 interface Lembrete {
@@ -68,9 +69,11 @@ export default function Lembretes() {
           <h1 className="text-2xl font-bold text-alisson-600">Lembretes</h1>
           <p className="text-gray-500 text-sm mt-1">{pendentes.length} pendentes</p>
         </div>
-        <Button onClick={() => setModalAberto(true)}>
-          <Plus size={16} /> Novo Lembrete
-        </Button>
+        <Tooltip texto="Criar um lembrete para follow-up, ligacao ou tarefa com data de vencimento" posicao="left">
+          <Button onClick={() => setModalAberto(true)}>
+            <Plus size={16} /> Novo Lembrete
+          </Button>
+        </Tooltip>
       </div>
 
       <div className="space-y-3 mb-8">
@@ -79,7 +82,9 @@ export default function Lembretes() {
           <Card key={l.id} className="p-4">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
+                <Tooltip texto="Clique para marcar como concluido" posicao="right">
                 <button onClick={() => handleConcluir(l.id)} className="mt-1 w-5 h-5 border-2 border-gray-300 rounded hover:border-alisson-400 hover:bg-alisson-50 transition-colors flex-shrink-0" />
+              </Tooltip>
                 <div>
                   <h3 className="font-medium text-alisson-600">{l.titulo}</h3>
                   <p className="text-sm text-gray-500 mt-0.5">{l.cliente_nome}</p>

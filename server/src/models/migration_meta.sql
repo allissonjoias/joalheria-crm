@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS meta_config (
   access_token TEXT,
   webhook_verify_token TEXT NOT NULL DEFAULT 'alisson_joalheria_2026',
   ativo INTEGER NOT NULL DEFAULT 1,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 -- Tabela para rastrear posts/reels do Instagram (para comentários)
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS instagram_posts (
   tipo TEXT DEFAULT 'post' CHECK (tipo IN ('post', 'reel', 'story')),
   caption TEXT,
   permalink TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 -- Log de webhooks recebidos (debug)
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS webhook_log (
   payload TEXT NOT NULL,
   processado INTEGER NOT NULL DEFAULT 0,
   erro TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 -- Índices para performance

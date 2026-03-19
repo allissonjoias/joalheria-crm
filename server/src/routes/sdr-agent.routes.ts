@@ -26,4 +26,8 @@ router.post('/simular', adminOnly, (req, res) => controller.simularConversa(req,
 router.get('/prompt-dara', adminOnly, (req, res) => controller.obterPromptDara(req, res));
 router.put('/prompt-dara', adminOnly, (req, res) => controller.salvarPromptDara(req, res));
 
+// Qualificacao local
+router.get('/qualificacao/estagios', adminOnly, (req, res) => controller.listarEstagiosFunil(req, res));
+router.get('/qualificacao/leads', adminOnly, (req, res) => controller.listarLeadsQualificados(req, res));
+
 export default router;

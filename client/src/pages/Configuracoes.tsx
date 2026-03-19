@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Shield, Users, Plus, Lock, Bot } from 'lucide-react';
+import { Shield, Users, Plus, Lock } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
-import { MetaConfigForm } from '../components/config/MetaConfigForm';
 import { ApiKeysForm } from '../components/config/ApiKeysForm';
+import { InstagramContasForm } from '../components/config/InstagramContasForm';
+import { MetaApiForm } from '../components/config/MetaApiForm';
+import { Tooltip } from '../components/ui/Tooltip';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
@@ -26,31 +28,14 @@ export default function Configuracoes() {
   const [form, setForm] = useState({ nome: '', email: '', senha: '', papel: 'vendedor' });
   const [senhaForm, setSenhaForm] = useState({ senha_atual: '', nova_senha: '', confirmar_senha: '' });
   const [senhaMsg, setSenhaMsg] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
-  const [daraPrompt, setDaraPrompt] = useState('');
-  const [daraMsg, setDaraMsg] = useState<{ tipo: 'sucesso' | 'erro'; texto: string } | null>(null);
-  const [daraSalvando, setDaraSalvando] = useState(false);
 
   const isAdmin = usuario?.papel === 'admin';
 
   useEffect(() => {
     if (isAdmin) {
       api.get('/auth/usuarios').then(({ data }) => setUsuarios(data)).catch(() => {});
-      api.get('/chat/config').then(({ data }) => setDaraPrompt(data.prompt_personalizado || '')).catch(() => {});
     }
   }, [isAdmin]);
-
-  const handleSalvarDara = async () => {
-    setDaraSalvando(true);
-    setDaraMsg(null);
-    try {
-      await api.put('/chat/config', { prompt_personalizado: daraPrompt });
-      setDaraMsg({ tipo: 'sucesso', texto: 'Prompt salvo com sucesso!' });
-    } catch (e: any) {
-      setDaraMsg({ tipo: 'erro', texto: e.response?.data?.erro || 'Erro ao salvar' });
-    } finally {
-      setDaraSalvando(false);
-    }
-  };
 
   const handleCriar = async () => {
     try {
@@ -97,9 +82,11 @@ export default function Configuracoes() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Profile */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
-            <Shield size={20} className="text-alisson-600" /> Meu Perfil
-          </h2>
+          <Tooltip texto="Dados do seu perfil de acesso ao CRM" posicao="right">
+            <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
+              <Shield size={20} className="text-alisson-600" /> Meu Perfil
+            </h2>
+          </Tooltip>
           <div className="space-y-3">
             <div>
               <p className="text-xs text-gray-500">Nome</p>
@@ -120,9 +107,11 @@ export default function Configuracoes() {
 
         {/* Password change */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
-            <Lock size={20} className="text-alisson-600" /> Alterar Senha
-          </h2>
+          <Tooltip texto="Altere sua senha de acesso ao CRM" posicao="right">
+            <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
+              <Lock size={20} className="text-alisson-600" /> Alterar Senha
+            </h2>
+          </Tooltip>
           <div className="space-y-3">
             <Input
               label="Senha Atual"
@@ -155,9 +144,11 @@ export default function Configuracoes() {
         {isAdmin && (
           <Card className="p-6 lg:col-span-2">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-alisson-600 flex items-center gap-2">
-                <Users size={20} className="text-alisson-600" /> Usuarios
-              </h2>
+              <Tooltip texto="Gerencie usuarios que acessam o CRM: vendedores e administradores" posicao="right">
+                <h2 className="text-lg font-semibold text-alisson-600 flex items-center gap-2">
+                  <Users size={20} className="text-alisson-600" /> Usuarios
+                </h2>
+              </Tooltip>
               <Button tamanho="sm" onClick={() => setModalAberto(true)}>
                 <Plus size={14} /> Novo
               </Button>
@@ -191,39 +182,17 @@ export default function Configuracoes() {
           </div>
         )}
 
-        {/* Dara IA Config - admin only */}
-        {isAdmin && (
-          <Card className="p-6 lg:col-span-2">
-            <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
-              <Bot size={20} className="text-alisson-600" /> Dara IA - Prompt Personalizado
-            </h2>
-            <p className="text-sm text-gray-500 mb-3">
-              Instrucoes adicionais para a Dara. Essas instrucoes sao adicionadas ao prompt base da IA e afetam como ela atende os clientes e qualifica leads (BANT).
-            </p>
-            <textarea
-              value={daraPrompt}
-              onChange={(e) => setDaraPrompt(e.target.value)}
-              rows={8}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm font-mono resize-y"
-              placeholder="Ex: Sempre mencione que temos promocao de aliancas este mes. Priorize agendamento de visitas presenciais..."
-            />
-            {daraMsg && (
-              <p className={`text-sm mt-2 ${daraMsg.tipo === 'sucesso' ? 'text-green-600' : 'text-red-600'}`}>
-                {daraMsg.texto}
-              </p>
-            )}
-            <div className="mt-3">
-              <Button onClick={handleSalvarDara} disabled={daraSalvando}>
-                {daraSalvando ? 'Salvando...' : 'Salvar Prompt'}
-              </Button>
-            </div>
-          </Card>
-        )}
-
-        {/* Meta API Config - admin only */}
+        {/* Instagram Multi-conta - admin only */}
         {isAdmin && (
           <div className="lg:col-span-2">
-            <MetaConfigForm />
+            <InstagramContasForm />
+          </div>
+        )}
+
+        {/* Meta API (WhatsApp Business) - admin only */}
+        {isAdmin && (
+          <div className="lg:col-span-2">
+            <MetaApiForm />
           </div>
         )}
       </div>

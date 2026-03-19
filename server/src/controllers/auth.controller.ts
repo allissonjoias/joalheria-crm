@@ -53,6 +53,21 @@ export class AuthController {
     }
   }
 
+  listarEquipe(req: Request, res: Response) {
+    try {
+      const usuarios = authService.listarUsuarios();
+      // Retorna apenas id, nome e papel (sem dados sensíveis)
+      const equipe = usuarios.map((u: any) => ({
+        id: u.id,
+        nome: u.nome,
+        papel: u.papel,
+      }));
+      res.json(equipe);
+    } catch (error: any) {
+      res.status(500).json({ erro: error.message });
+    }
+  }
+
   alterarSenha(req: Request, res: Response) {
     try {
       const { senha_atual, nova_senha } = req.body;

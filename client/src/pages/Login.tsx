@@ -34,7 +34,7 @@ export default function Login() {
         <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md -mt-24 relative">
           <div className="text-center mb-8">
             <img src="/leao.svg" alt="Alisson" className="w-20 h-20 mx-auto mb-4" />
-            <h1 className="text-2xl font-bold text-alisson-600">WhatsAlisson</h1>
+            <h1 className="text-2xl font-bold text-alisson-600">IAlisson</h1>
             <p className="text-gray-500 mt-1 text-sm">Caixa de entrada unificada</p>
           </div>
 

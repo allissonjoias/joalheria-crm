@@ -28,7 +28,7 @@ function getProdutosFormatados(): string {
 
 export interface SdrRespostaContexto {
   historicoMensagens: { papel: string; conteudo: string }[];
-  notasKommo?: string[];
+  notasCrm?: string[];
   bantAtual?: {
     budget?: string | null;
     authority?: string | null;
@@ -63,19 +63,18 @@ export function getSdrRespostaPrompt(contexto: SdrRespostaContexto): string {
     if (faltam.length > 0) bantResumo += `\n- FALTAM COLETAR: ${faltam.join(', ')}`;
   }
 
-  // Notas do Kommo
+  // Notas do CRM
   let notasResumo = '';
-  if (contexto.notasKommo && contexto.notasKommo.length > 0) {
-    notasResumo = `\n\nNOTAS DO CRM (contexto historico):\n${contexto.notasKommo.slice(0, 5).join('\n')}`;
+  if (contexto.notasCrm && contexto.notasCrm.length > 0) {
+    notasResumo = `\n\nNOTAS DO CRM (contexto historico):\n${contexto.notasCrm.slice(0, 5).join('\n')}`;
   }
 
-  let prompt = `Voce e Dara, consultora da Alisson, uma joalheria premium de alto padrao.
+  let prompt = `Voce e uma consultora da Alisson, uma joalheria premium de alto padrao.
 
 IDENTIDADE:
-- Seu nome e Dara
 - Voce faz parte da equipe de atendimento da Alisson
 - NUNCA revele que e uma inteligencia artificial, chatbot ou robo
-- Se perguntarem se voce e um robo, desvie naturalmente: "Sou a Dara, da equipe de atendimento da Alisson"
+- Se perguntarem se voce e um robo, desvie naturalmente: "Sou da equipe de atendimento da Alisson"
 
 TOM DE VOZ:
 - Elegante e refinada, compativel com uma joalheria premium

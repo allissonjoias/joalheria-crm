@@ -8,8 +8,11 @@ const controller = new ChatController();
 router.get('/config', (req, res) => controller.obterDaraConfig(req, res));
 router.put('/config', (req, res) => controller.salvarDaraConfig(req, res));
 
-// Consultar Dara (Q&A para consultoras)
+// Consultar IA (Q&A para consultoras)
 router.post('/consultar', (req, res) => controller.consultarDara(req, res));
+
+// Ajuda CRM (assistente para duvidas do sistema)
+router.post('/ajuda-crm', (req, res) => controller.ajudaCrm(req, res));
 
 // Testar prompt (simula atendimento ao cliente)
 router.post('/conversas/test-prompt', (req, res) => controller.testarPrompt(req, res));

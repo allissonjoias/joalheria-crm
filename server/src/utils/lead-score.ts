@@ -145,7 +145,7 @@ export function classificarLead(score: number): 'QUENTE' | 'MORNO' | 'FRIO' | 'D
   return 'DESCARTE';
 }
 
-// Mapeamento de classificacao para nomes de status no Kommo
+// Mapeamento de classificacao para nomes de status no funil
 // Os IDs reais serao resolvidos dinamicamente via fetchPipelines
 export function getStatusNomePorClassificacao(classificacao: string): string {
   switch (classificacao) {

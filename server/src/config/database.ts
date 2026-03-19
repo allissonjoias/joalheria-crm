@@ -16,6 +16,16 @@ const MIGRATION_BANT_PATH = path.resolve(__dirname, '../models/migration_bant.sq
 const MIGRATION_API_KEYS_PATH = path.resolve(__dirname, '../models/migration_api_keys.sql');
 const MIGRATION_SDR_QUALIFIER_PATH = path.resolve(__dirname, '../models/migration_sdr_qualifier.sql');
 const MIGRATION_AGENTES_IA_PATH = path.resolve(__dirname, '../models/migration_agentes_ia.sql');
+const MIGRATION_FUNIL_LOCAL_PATH = path.resolve(__dirname, '../models/migration_funil_local.sql');
+const MIGRATION_INSTAGRAM_MULTI_PATH = path.resolve(__dirname, '../models/migration_instagram_multi.sql');
+const MIGRATION_KOMMO_SDR_PATH = path.resolve(__dirname, '../models/migration_kommo_sdr.sql');
+const MIGRATION_PONTO_PATH = path.resolve(__dirname, '../models/migration_ponto.sql');
+const MIGRATION_CRM_AVANCADO_PATH = path.resolve(__dirname, '../models/migration_crm_avancado.sql');
+const MIGRATION_EXTRACAO_IA_PATH = path.resolve(__dirname, '../models/migration_extracao_ia.sql');
+const MIGRATION_CICLO_VIDA_PATH = path.resolve(__dirname, '../models/migration_ciclo_vida.sql');
+const MIGRATION_ESTORNO_PATH = path.resolve(__dirname, '../models/migration_estorno.sql');
+const MIGRATION_META_API_PATH = path.resolve(__dirname, '../models/migration_meta_api.sql');
+const MIGRATION_AUTOMACAO_PATH = path.resolve(__dirname, '../models/migration_automacao.sql');
 
 let db: SqlJsDatabase | null = null;
 
@@ -501,6 +511,440 @@ async function runSdrQualifierMigrations(wrapper: DatabaseLike, rawDb: SqlJsData
   }
 }
 
+async function runFunilLocalMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='funil_estagios'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Funil Local...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_FUNIL_LOCAL_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('Funil Local migration error:', e.message);
+        }
+      }
+    }
+
+    // Migrar estagios antigos (lowercase) para nomes capitalizados
+    const estagiosAntigos: Record<string, string> = {
+      'lead': 'Lead',
+      'contatado': 'Contatado',
+      'interessado': 'Interessado',
+      'negociacao': 'Negociacao',
+      'vendido': 'Vendido',
+      'pos_venda': 'Pos-venda',
+    };
+    for (const [antigo, novo] of Object.entries(estagiosAntigos)) {
+      try {
+        rawDb.exec(`UPDATE pipeline SET estagio = '${novo}' WHERE estagio = '${antigo}'`);
+      } catch (e) { /* ignore */ }
+    }
+
+    // Recriar tabela pipeline sem CHECK constraint para suportar estagios dinamicos
+    // So faz se o CHECK constraint ainda existir
+    try {
+      const tableSql = wrapper.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='pipeline'"
+      ).get() as any;
+      if (tableSql?.sql && String(tableSql.sql).includes('CHECK')) {
+        console.log('Migrando tabela pipeline para remover CHECK constraint...');
+        rawDb.exec(`
+          CREATE TABLE pipeline_new (
+            id TEXT PRIMARY KEY,
+            cliente_id TEXT NOT NULL,
+            vendedor_id TEXT,
+            titulo TEXT NOT NULL,
+            valor REAL,
+            estagio TEXT NOT NULL DEFAULT 'Lead',
+            produto_interesse TEXT,
+            notas TEXT,
+            criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id),
+            FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
+          )
+        `);
+        rawDb.exec('INSERT INTO pipeline_new SELECT * FROM pipeline');
+        rawDb.exec('DROP TABLE pipeline');
+        rawDb.exec('ALTER TABLE pipeline_new RENAME TO pipeline');
+        console.log('Tabela pipeline migrada com sucesso!');
+      }
+    } catch (e: any) {
+      console.error('Erro ao migrar pipeline:', e.message);
+    }
+
+    saveDb();
+    console.log('Migration Funil Local aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Funil Local:', e);
+  }
+}
+
+async function runInstagramMultiMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='instagram_contas'"
+  ).get();
+
+  // Verificar se coluna instagram_conta_id existe em conversas
+  const conversaCols = wrapper.prepare("PRAGMA table_info(conversas)").all() as any[];
+  const hasIgContaId = conversaCols.some((c: any) => c.name === 'instagram_conta_id');
+
+  if (tableExists && hasIgContaId) return;
+
+  console.log('Rodando migration Instagram Multi-conta...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_INSTAGRAM_MULTI_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('Instagram Multi migration error:', e.message);
+        }
+      }
+    }
+    // Adicionar coluna instagram_conta_id na tabela conversas
+    try {
+      rawDb.exec("ALTER TABLE conversas ADD COLUMN instagram_conta_id TEXT DEFAULT NULL");
+    } catch (e: any) {
+      if (!e.message?.includes('duplicate column')) {
+        console.error('Erro ao adicionar instagram_conta_id:', e.message);
+      }
+    }
+
+    // Adicionar colunas de config de eventos na tabela instagram_contas
+    const configCols = ['receber_dm', 'receber_comentarios', 'receber_mencoes', 'responder_comentarios_auto', 'responder_mencoes_auto'];
+    const igCols = wrapper.prepare("PRAGMA table_info(instagram_contas)").all() as any[];
+    const igColNames = igCols.map((c: any) => c.name);
+    for (const col of configCols) {
+      if (!igColNames.includes(col)) {
+        try {
+          const defaultVal = col.startsWith('responder_') ? 0 : 1;
+          rawDb.exec(`ALTER TABLE instagram_contas ADD COLUMN ${col} INTEGER DEFAULT ${defaultVal}`);
+        } catch (e: any) {
+          if (!e.message?.includes('duplicate column')) {
+            console.error(`Erro ao adicionar ${col}:`, e.message);
+          }
+        }
+      }
+    }
+
+    saveDb();
+    console.log('Migration Instagram Multi aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Instagram Multi:', e);
+  }
+}
+
+async function runKommoSdrMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='kommo_telefone_lead'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Kommo SDR...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_KOMMO_SDR_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('Kommo SDR migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Kommo SDR aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Kommo SDR:', e);
+  }
+}
+
+async function runPontoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='ponto'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Ponto...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_PONTO_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('Ponto migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Ponto aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Ponto:', e);
+  }
+}
+
+async function runCrmAvancadoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='funis'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration CRM Avancado (campos cliente, funis, motivos, origens, distribuicao)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_CRM_AVANCADO_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+          console.error('CRM Avancado migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration CRM Avancado aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration CRM Avancado:', e);
+  }
+}
+
+async function runExtracaoIaMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const columns = wrapper.prepare("PRAGMA table_info(pipeline)").all() as any[];
+  const hasItens = columns.some((col: any) => col.name === 'itens_pedido');
+  if (hasItens) return;
+
+  console.log('Rodando migration Extracao IA (campos auto-preenchidos no deal)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_EXTRACAO_IA_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+          console.error('Extracao IA migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Extracao IA aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Extracao IA:', e);
+  }
+}
+
+async function runCicloVidaMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se coluna fase ja existe em funil_estagios
+  const columns = wrapper.prepare("PRAGMA table_info(funil_estagios)").all() as any[];
+  const hasFase = columns.some((col: any) => col.name === 'fase');
+  if (hasFase) return;
+
+  console.log('Rodando migration Ciclo de Vida (pos-venda, nutricao, recompra)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_CICLO_VIDA_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+          console.error('Ciclo de Vida migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Ciclo de Vida aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Ciclo de Vida:', e);
+  }
+}
+
+async function runEstornoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const columns = wrapper.prepare("PRAGMA table_info(vendas)").all() as any[];
+  const hasEstornada = columns.some((col: any) => col.name === 'estornada');
+  if (hasEstornada) return;
+
+  console.log('Rodando migration Estorno (cancelamento pos-venda)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_ESTORNO_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+          console.error('Estorno migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Estorno aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Estorno:', e);
+  }
+}
+
+async function runMetaApiMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='meta_api_config'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Meta API (WhatsApp Business Cloud API)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_META_API_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('Meta API migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Meta API aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Meta API:', e);
+  }
+}
+
+async function runAutomacaoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='automacao_fluxos'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Automacao (fluxos, campanhas, templates)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_AUTOMACAO_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('Automacao migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Automacao aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Automacao:', e);
+  }
+}
+
 let initPromise: Promise<DatabaseLike> | null = null;
 
 export function initDatabase(): Promise<DatabaseLike> {
@@ -537,7 +981,13 @@ export function initDatabase(): Promise<DatabaseLike> {
 
     // Run migrations if needed
     await runMigrations(wrapper, db);
-    await runKommoMigrations(wrapper, db);
+    // Limpar tabelas Kommo obsoletas (integração desvinculada)
+    try {
+      db.exec('DROP TABLE IF EXISTS kommo_config');
+      db.exec('DROP TABLE IF EXISTS kommo_import_log');
+      db.exec('DROP TABLE IF EXISTS kommo_mapeamento');
+      saveDb();
+    } catch {}
     await runEvolutionMigrations(wrapper, db);
     await runDaraMigrations(wrapper, db);
     await runWhatsAppMultiMigrations(wrapper, db);
@@ -548,6 +998,16 @@ export function initDatabase(): Promise<DatabaseLike> {
     await runApiKeysMigrations(wrapper, db);
     await runSdrQualifierMigrations(wrapper, db);
     await runAgentesIaMigrations(wrapper, db);
+    await runFunilLocalMigrations(wrapper, db);
+    await runInstagramMultiMigrations(wrapper, db);
+    await runKommoSdrMigrations(wrapper, db);
+    await runPontoMigrations(wrapper, db);
+    await runCrmAvancadoMigrations(wrapper, db);
+    await runExtracaoIaMigrations(wrapper, db);
+    await runCicloVidaMigrations(wrapper, db);
+    await runEstornoMigrations(wrapper, db);
+    await runMetaApiMigrations(wrapper, db);
+    await runAutomacaoMigrations(wrapper, db);
 
     // Atualizar modelos descontinuados para versoes atuais
     try {
@@ -598,6 +1058,7 @@ export function initDatabase(): Promise<DatabaseLike> {
         saveDb();
         console.log('Coluna prompt_dara_sdr adicionada ao sdr_agent_config');
       }
+      // Colunas kommo_qual_* removidas — integração Kommo desvinculada
     } catch (e) { /* already exists */ }
 
     // Add selecionado column to api_keys if missing
@@ -607,6 +1068,40 @@ export function initDatabase(): Promise<DatabaseLike> {
         db.exec("ALTER TABLE api_keys ADD COLUMN selecionado INTEGER DEFAULT 0");
         saveDb();
         console.log('Coluna selecionado adicionada ao api_keys');
+      }
+    } catch (e) { /* already exists */ }
+
+    // Colunas de config do Instagram (receber_dm, receber_comentarios, receber_mencoes)
+    try {
+      const igCols = wrapper.prepare("PRAGMA table_info(instagram_contas)").all() as any[];
+      if (igCols.length > 0 && !igCols.some((c: any) => c.name === 'receber_dm')) {
+        db.exec("ALTER TABLE instagram_contas ADD COLUMN receber_dm INTEGER DEFAULT 1");
+        db.exec("ALTER TABLE instagram_contas ADD COLUMN receber_comentarios INTEGER DEFAULT 1");
+        db.exec("ALTER TABLE instagram_contas ADD COLUMN receber_mencoes INTEGER DEFAULT 1");
+        db.exec("ALTER TABLE instagram_contas ADD COLUMN responder_comentarios_auto INTEGER DEFAULT 0");
+        db.exec("ALTER TABLE instagram_contas ADD COLUMN responder_mencoes_auto INTEGER DEFAULT 0");
+        saveDb();
+        console.log('Colunas de config Instagram adicionadas');
+      }
+    } catch (e) { /* already exists */ }
+
+    // Migration: foto_perfil na tabela clientes
+    try {
+      const clienteCols = wrapper.prepare("PRAGMA table_info(clientes)").all() as any[];
+      if (clienteCols.length > 0 && !clienteCols.some((c: any) => c.name === 'foto_perfil')) {
+        db.exec("ALTER TABLE clientes ADD COLUMN foto_perfil TEXT DEFAULT NULL");
+        saveDb();
+        console.log('Coluna foto_perfil adicionada em clientes');
+      }
+    } catch (e) { /* already exists */ }
+
+    // Migration: ultima_leitura na tabela conversas (contador de nao lidas)
+    try {
+      const conversasCols = wrapper.prepare("PRAGMA table_info(conversas)").all() as any[];
+      if (conversasCols.length > 0 && !conversasCols.some((c: any) => c.name === 'ultima_leitura')) {
+        db.exec("ALTER TABLE conversas ADD COLUMN ultima_leitura TEXT DEFAULT NULL");
+        saveDb();
+        console.log('Coluna ultima_leitura adicionada em conversas');
       }
     } catch (e) { /* already exists */ }
 

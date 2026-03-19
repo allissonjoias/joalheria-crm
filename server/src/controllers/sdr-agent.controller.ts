@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { SdrPollingService } from '../services/sdr-polling.service';
 import { SdrNotificationService } from '../services/sdr-notification.service';
 import { SdrActionEngineService } from '../services/sdr-action-engine.service';
+import { SdrQualifierService } from '../services/sdr-qualifier.service';
 import { sdrScheduler } from '../services/sdr-scheduler.service';
 import { ClaudeService, MensagemChat } from '../services/claude.service';
 import { getDb, saveDb } from '../config/database';
@@ -32,7 +33,7 @@ function detectarNome(historico: any[]): string | null {
   for (let i = 0; i < historico.length - 1; i++) {
     const atual = historico[i];
     const prox  = historico[i + 1];
-    if (atual.papel === 'dara' && /com quem|quem eu falo|como posso te chamar|prazer de falar/i.test(atual.conteudo)) {
+    if ((atual.papel === 'dara' || atual.papel === 'assistant') && /com quem|quem eu falo|como posso te chamar|prazer de falar/i.test(atual.conteudo)) {
       if (prox.papel === 'lead') {
         const r = prox.conteudo.trim();
         const palavras = r.split(/\s+/);
@@ -282,6 +283,7 @@ function getDaraPrompt(): string {
 const polling = new SdrPollingService();
 const notificacao = new SdrNotificationService();
 const acoes = new SdrActionEngineService();
+const qualifier = new SdrQualifierService();
 
 export class SdrAgentController {
   obterConfig(_req: Request, res: Response) {
@@ -439,7 +441,7 @@ export class SdrAgentController {
         // Montar system prompt com contexto do BANT atual
         const promptBase = getDaraPrompt();
         const fallback = !promptBase.trim()
-          ? 'Voce e a Dara, consultora virtual da Alisson Joias, uma joalheria premium. Seja acolhedora, profissional e consultiva. Faca perguntas para entender a necessidade do cliente (tipo de peca, ocasiao, orcamento, prazo). Responda de forma curta e natural, como no WhatsApp. Nunca invente precos. Se o cliente pedir precos, diga que vai verificar com a consultora. Use emojis com moderacao.'
+          ? 'Voce e uma consultora virtual da Alisson Joias, uma joalheria premium. Seja acolhedora, profissional e consultiva. Faca perguntas para entender a necessidade do cliente (tipo de peca, ocasiao, orcamento, prazo). Responda de forma curta e natural, como no WhatsApp. Nunca invente precos. Se o cliente pedir precos, diga que vai verificar com a consultora. Use emojis com moderacao.'
           : '';
         const systemPrompt = (promptBase || fallback) + buildContextoBant(bantAtual);
 
@@ -449,7 +451,7 @@ export class SdrAgentController {
           content: m.conteudo,
         }));
 
-        // Gerar resposta da Dara (max_tokens reduzido de 1200 → 512)
+        // Gerar resposta do Agente IA (max_tokens reduzido de 1200 → 512)
         resposta = await claude.simularDara(systemPrompt, mensagensParaIA, 512);
 
         // Limpar resposta (Gemini às vezes retorna markdown/JSON)
@@ -460,9 +462,9 @@ export class SdrAgentController {
         } catch { /* não era JSON */ }
       }
 
-      // Transferir se score >= 80, BANT completo, ou Dara disse a frase de transição
-      const daraTransferiu = /nossa especialista|vou chamar|um segundo/i.test(resposta);
-      const transferirHumano = pts.total >= 80 || bant5Completo || daraTransferiu;
+      // Transferir se score >= 80, BANT completo, ou agente disse a frase de transicao
+      const agenteTransferiu = /nossa especialista|vou chamar|um segundo/i.test(resposta);
+      const transferirHumano = pts.total >= 80 || bant5Completo || agenteTransferiu;
 
       res.json({
         resposta: resposta.trim(),
@@ -478,6 +480,30 @@ export class SdrAgentController {
         transferir_humano: transferirHumano,
         _debug_prompt_chars: getDaraPrompt().length,
       });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  // ─── Qualificacao Local ─────────────────────────────────────────────
+
+  listarEstagiosFunil(_req: Request, res: Response) {
+    try {
+      const estagios = qualifier.listarEstagios();
+      res.json(estagios);
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  listarLeadsQualificados(req: Request, res: Response) {
+    try {
+      const { classificacao, limite } = req.query;
+      const leads = qualifier.listarQualificacoes({
+        classificacao: classificacao as string | undefined,
+        limite: limite ? parseInt(limite as string) : 50,
+      });
+      res.json(leads);
     } catch (e: any) {
       res.status(500).json({ erro: e.message });
     }

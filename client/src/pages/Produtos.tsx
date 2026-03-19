@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
+import { Tooltip } from '../components/ui/Tooltip';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 
@@ -90,9 +91,11 @@ export default function Produtos() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-alisson-600">Produtos</h1>
         {isAdmin && (
-          <Button onClick={() => { setEditando(null); setForm({ nome: '', descricao: '', categoria: 'aliancas', material: 'Ouro 18k', pedra: '', preco: '', preco_custo: '', estoque: '0' }); setModalAberto(true); }}>
-            <Plus size={16} /> Novo Produto
-          </Button>
+          <Tooltip texto="Cadastrar uma nova joia no catalogo com foto, preco e detalhes" posicao="left">
+            <Button onClick={() => { setEditando(null); setForm({ nome: '', descricao: '', categoria: 'aliancas', material: 'Ouro 18k', pedra: '', preco: '', preco_custo: '', estoque: '0' }); setModalAberto(true); }}>
+              <Plus size={16} /> Novo Produto
+            </Button>
+          </Tooltip>
         )}
       </div>
 
@@ -118,8 +121,12 @@ export default function Produtos() {
                 <h3 className="font-semibold text-alisson-600 text-sm">{p.nome}</h3>
                 {isAdmin && (
                   <div className="flex gap-1">
-                    <button onClick={() => handleEditar(p)} className="p-1 hover:bg-gray-100 rounded"><Edit2 size={14} className="text-gray-400" /></button>
-                    <button onClick={() => handleExcluir(p.id)} className="p-1 hover:bg-red-50 rounded"><Trash2 size={14} className="text-red-400" /></button>
+                    <Tooltip texto="Editar dados do produto: nome, preco, estoque" posicao="left">
+                      <button onClick={() => handleEditar(p)} className="p-1 hover:bg-gray-100 rounded"><Edit2 size={14} className="text-gray-400" /></button>
+                    </Tooltip>
+                    <Tooltip texto="Desativar este produto do catalogo" posicao="left">
+                      <button onClick={() => handleExcluir(p.id)} className="p-1 hover:bg-red-50 rounded"><Trash2 size={14} className="text-red-400" /></button>
+                    </Tooltip>
                   </div>
                 )}
               </div>
@@ -142,24 +149,38 @@ export default function Produtos() {
       {/* Product form modal */}
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo={editando ? 'Editar Produto' : 'Novo Produto'}>
         <div className="space-y-4">
-          <Input label="Nome" value={form.nome} onChange={(e) => setForm({...form, nome: e.target.value})} required />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
-            <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" rows={2} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select value={form.categoria} onChange={(e) => setForm({...form, categoria: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
-                {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+          <Tooltip texto="Nome da peca que aparecera no catalogo e nas vendas" posicao="right" className="w-full">
+            <Input label="Nome" value={form.nome} onChange={(e) => setForm({...form, nome: e.target.value})} required />
+          </Tooltip>
+          <Tooltip texto="Descricao detalhada da peca: design, acabamento, peso" posicao="right" className="w-full">
+            <div className="w-full">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
+              <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" rows={2} />
             </div>
-            <Input label="Material" value={form.material} onChange={(e) => setForm({...form, material: e.target.value})} />
+          </Tooltip>
+          <div className="grid grid-cols-2 gap-4">
+            <Tooltip texto="Tipo de joia: aliancas, aneis, colares, brincos, pulseiras" posicao="bottom" className="w-full">
+              <div className="w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                <select value={form.categoria} onChange={(e) => setForm({...form, categoria: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
+                  {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              </div>
+            </Tooltip>
+            <Tooltip texto="Material principal: Ouro 18k, Ouro 10k, Prata 925, Platina" posicao="bottom" className="w-full">
+              <Input label="Material" value={form.material} onChange={(e) => setForm({...form, material: e.target.value})} />
+            </Tooltip>
           </div>
           <div className="grid grid-cols-3 gap-4">
-            <Input label="Pedra" value={form.pedra} onChange={(e) => setForm({...form, pedra: e.target.value})} />
-            <Input label="Preco" type="number" step="0.01" value={form.preco} onChange={(e) => setForm({...form, preco: e.target.value})} required />
-            <Input label="Estoque" type="number" value={form.estoque} onChange={(e) => setForm({...form, estoque: e.target.value})} />
+            <Tooltip texto="Pedra preciosa da peca (se houver): diamante, esmeralda, rubi" posicao="bottom" className="w-full">
+              <Input label="Pedra" value={form.pedra} onChange={(e) => setForm({...form, pedra: e.target.value})} />
+            </Tooltip>
+            <Tooltip texto="Preco de venda ao cliente em reais" posicao="bottom" className="w-full">
+              <Input label="Preco" type="number" step="0.01" value={form.preco} onChange={(e) => setForm({...form, preco: e.target.value})} required />
+            </Tooltip>
+            <Tooltip texto="Quantidade disponivel em estoque. Zero = sob encomenda" posicao="bottom" className="w-full">
+              <Input label="Estoque" type="number" value={form.estoque} onChange={(e) => setForm({...form, estoque: e.target.value})} />
+            </Tooltip>
           </div>
           <div className="flex gap-2 justify-end">
             <Button variante="secundario" onClick={() => setModalAberto(false)}>Cancelar</Button>

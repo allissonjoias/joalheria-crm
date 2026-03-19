@@ -30,7 +30,7 @@ export function ChatWindow({ mensagens, enviando, onEnviar, ativo }: ChatWindowP
         {mensagens.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <p className="text-lg mb-2">Inicie a conversa</p>
-            <p className="text-sm">Digite a mensagem do cliente para a Dara IA responder</p>
+            <p className="text-sm">Digite a mensagem do cliente para a IA responder</p>
           </div>
         )}
         {mensagens.map((msg) => (
@@ -42,7 +42,7 @@ export function ChatWindow({ mensagens, enviando, onEnviar, ativo }: ChatWindowP
               <Loader2 size={16} className="text-white animate-spin" />
             </div>
             <div className="bg-white border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-none">
-              <p className="text-sm text-gray-400">Dara IA esta digitando...</p>
+              <p className="text-sm text-gray-400">IA esta digitando...</p>
             </div>
           </div>
         )}

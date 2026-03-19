@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
   senha_hash TEXT NOT NULL,
   papel TEXT NOT NULL DEFAULT 'vendedor' CHECK (papel IN ('admin', 'vendedor')),
   ativo INTEGER NOT NULL DEFAULT 1,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS clientes (
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS clientes (
   tags TEXT DEFAULT '[]',
   notas TEXT,
   vendedor_id TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
 );
 
@@ -40,8 +40,8 @@ CREATE TABLE IF NOT EXISTS produtos (
   estoque INTEGER NOT NULL DEFAULT 0,
   foto_url TEXT,
   ativo INTEGER NOT NULL DEFAULT 1,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS pipeline (
@@ -53,8 +53,8 @@ CREATE TABLE IF NOT EXISTS pipeline (
   estagio TEXT NOT NULL DEFAULT 'lead' CHECK (estagio IN ('lead', 'contatado', 'interessado', 'negociacao', 'vendido', 'pos_venda')),
   produto_interesse TEXT,
   notas TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (cliente_id) REFERENCES clientes(id),
   FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
 );
@@ -69,8 +69,8 @@ CREATE TABLE IF NOT EXISTS vendas (
   metodo_pagamento TEXT CHECK (metodo_pagamento IN ('pix', 'cartao_credito', 'cartao_debito', 'dinheiro', 'transferencia', 'parcelado')),
   parcelas INTEGER DEFAULT 1,
   notas TEXT,
-  data_venda TEXT NOT NULL DEFAULT (datetime('now')),
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  data_venda TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (cliente_id) REFERENCES clientes(id),
   FOREIGN KEY (vendedor_id) REFERENCES usuarios(id),
   FOREIGN KEY (produto_id) REFERENCES produtos(id),
@@ -82,8 +82,8 @@ CREATE TABLE IF NOT EXISTS conversas (
   cliente_id TEXT NOT NULL,
   vendedor_id TEXT,
   ativa INTEGER NOT NULL DEFAULT 1,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
-  atualizado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (cliente_id) REFERENCES clientes(id),
   FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
 );
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS mensagens (
   papel TEXT NOT NULL CHECK (papel IN ('user', 'assistant')),
   conteudo TEXT NOT NULL,
   dados_extraidos TEXT,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (conversa_id) REFERENCES conversas(id)
 );
 
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS lembretes (
   descricao TEXT,
   data_lembrete TEXT NOT NULL,
   concluido INTEGER NOT NULL DEFAULT 0,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (cliente_id) REFERENCES clientes(id),
   FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
 );
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS interacoes (
   vendedor_id TEXT,
   tipo TEXT NOT NULL CHECK (tipo IN ('chat', 'ligacao', 'email', 'visita', 'nota', 'whatsapp')),
   descricao TEXT NOT NULL,
-  criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+  criado_em TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (cliente_id) REFERENCES clientes(id),
   FOREIGN KEY (vendedor_id) REFERENCES usuarios(id)
 );

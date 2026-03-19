@@ -2,6 +2,8 @@ import * as cron from 'node-cron';
 import { SdrPollingService } from './sdr-polling.service';
 import { SdrNotificationService } from './sdr-notification.service';
 import { SdrActionEngineService } from './sdr-action-engine.service';
+import { cicloVidaService } from './ciclo-vida.service';
+import { automacaoEngine } from './automacao-engine.service';
 
 interface ScheduledJob {
   nome: string;
@@ -86,6 +88,29 @@ export class SdrSchedulerService {
     }, { timezone: 'America/Sao_Paulo' });
 
     this.jobs.push({ nome: 'inativos', task: inativosJob });
+
+    // Job 5: Ciclo de Vida - processar nutricoes pendentes (a cada 1 hora)
+    const cicloVidaJob = cron.schedule('30 * * * *', () => {
+      try {
+        console.log('[CICLO-VIDA] Verificando nutricoes pendentes...');
+        cicloVidaService.processarNutricoes();
+      } catch (e) {
+        console.error('[CICLO-VIDA] Erro ao processar nutricoes:', e);
+      }
+    }, { timezone: 'America/Sao_Paulo' });
+
+    this.jobs.push({ nome: 'ciclo_vida', task: cicloVidaJob });
+
+    // Job 6: Automacao - processar waits pendentes (a cada 1 minuto)
+    const automacaoJob = cron.schedule('* * * * *', () => {
+      try {
+        automacaoEngine.processarWaitsPendentes();
+      } catch (e) {
+        console.error('[AUTOMACAO] Erro ao processar waits pendentes:', e);
+      }
+    }, { timezone: 'America/Sao_Paulo' });
+
+    this.jobs.push({ nome: 'automacao_waits', task: automacaoJob });
 
     this.rodando = true;
     console.log(`[SDR] Scheduler iniciado com ${this.jobs.length} jobs (polling a cada ${config.intervalo_polling}min)`);

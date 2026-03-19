@@ -73,7 +73,7 @@ export class ProdutosController {
 
     if (campos.length === 0) return res.status(400).json({ erro: 'Nenhum campo para atualizar' });
 
-    campos.push("atualizado_em = datetime('now')");
+    campos.push("atualizado_em = datetime('now', 'localtime')");
     valores.push(id);
 
     db.prepare(`UPDATE produtos SET ${campos.join(', ')} WHERE id = ?`).run(...valores);

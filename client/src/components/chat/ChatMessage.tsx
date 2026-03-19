@@ -21,7 +21,7 @@ export function ChatMessage({ papel, conteudo, criado_em }: ChatMessageProps) {
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-1">
-          {isAssistant ? 'Dara IA' : 'Voce'} - {new Date(criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+          {isAssistant ? 'Agente IA' : 'Voce'} - {new Date(criado_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
         </p>
       </div>
     </div>

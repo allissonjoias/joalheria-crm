@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getDb } from '../config/database';
-import { getSystemPrompt, getConsultaPrompt } from '../utils/prompt';
+import { getSystemPrompt, getConsultaPrompt, getAjudaCrmPrompt } from '../utils/prompt';
 import { getSdrRespostaPrompt, SdrRespostaContexto } from '../utils/sdr-prompt';
 
 export interface BANTResult {
@@ -201,39 +201,59 @@ export class ClaudeService {
     return callAI(systemPrompt, historico, 800);
   }
 
+  async ajudaCrm(historico: MensagemChat[]): Promise<string> {
+    const systemPrompt = getAjudaCrmPrompt();
+    return callAI(systemPrompt, historico, 800);
+  }
+
   async extrairDados(historico: MensagemChat[]): Promise<Record<string, any> | null> {
     const conversaTexto = historico
-      .map(m => `${m.role === 'user' ? 'Cliente' : 'Dara'}: ${m.content}`)
+      .map(m => `${m.role === 'user' ? 'Cliente' : 'Agente'}: ${m.content}`)
       .join('\n');
 
     try {
       const resposta = await callAI(
-        'Voce e um extrator de dados. Analise conversas e extraia informacoes estruturadas em JSON.',
+        `Voce e um extrator de dados especializado em joalheria. Analise conversas entre clientes e vendedoras de uma joalheria de ouro 18k e extraia TODAS as informacoes estruturadas em JSON.
+Seja inteligente: interprete o contexto. Ex: "quero uma alianca pra casar" = ocasiao casamento, tipo aliancas. "parcelo em 3x?" = parcelas 3. "tem desconto a vista?" = cliente perguntando sobre desconto.
+Extraia APENAS o que foi CLARAMENTE mencionado ou fortemente implicado. Nao invente dados.`,
         [
           {
             role: 'user',
-            content: `Analise a conversa abaixo e extraia os dados do cliente em formato JSON.
-Retorne APENAS o JSON, sem texto adicional. Se um campo nao foi mencionado, use null.
+            content: `Analise a conversa e extraia os dados em JSON. Retorne APENAS o JSON.
+Se um campo nao foi mencionado, use null. Para arrays vazios use [].
 
-Formato esperado:
 {
   "nome": "nome completo ou null",
   "telefone": "telefone ou null",
   "email": "email ou null",
-  "tipo_interesse": "aliancas|aneis|colares|brincos|pulseiras|sob_encomenda ou null",
-  "material_preferido": "material ou null",
-  "pedra_preferida": "pedra ou null",
+  "tipo_interesse": "aliancas|aneis|colares|brincos|pulseiras|escapularios|correntes|tornozeleiras|pingentes|braceletes|piercings|sob_encomenda ou null",
+  "material_preferido": "ouro_18k|ouro_branco|ouro_rose ou null",
+  "pedra_preferida": "diamante|esmeralda|rubi|safira|nenhuma ou null",
   "orcamento_min": null,
   "orcamento_max": null,
-  "ocasiao": "casamento|noivado|presente|aniversario|formatura|uso_pessoal ou null",
-  "resumo": "breve resumo do interesse"
+  "ocasiao": "casamento|noivado|presente|aniversario|formatura|uso_pessoal|batizado|nascimento ou null",
+  "resumo": "breve resumo do interesse",
+
+  "tipo_pedido": "produto|servico|fabricacao|garantia|multiplos ou null",
+  "itens_pedido": ["alianca", "anel"],
+  "desconto": "porcentagem ou valor mencionado, ex: '10%' ou 'R$200' ou null",
+  "parcelas": null,
+  "forma_pagamento": "pix|cartao|dinheiro|transferencia|boleto ou null",
+  "valor_frete": null,
+  "endereco_entrega": "endereco completo se mencionado ou null",
+  "data_prevista_entrega": "data ISO se mencionado ou null",
+  "observacao_pedido": "qualquer detalhe especifico sobre o pedido (gravacao, tamanho, personalizacao) ou null",
+  "forma_atendimento": "online|presencial|hibrido ou null",
+  "tipo_cliente": "primeiro_contato|cliente_base ou null"
 }
+
+ITENS VALIDOS para itens_pedido: alianca, anel, corrente, brinco, pulseira, tornozeleira, pingente, bracelete, escapulario, piercing, anel_formatura
 
 CONVERSA:
 ${conversaTexto}`,
           },
         ],
-        512,
+        800,
       );
 
       const jsonMatch = resposta.match(/\{[\s\S]*\}/);
@@ -280,9 +300,66 @@ ${conversaTexto}`,
     return callAI(systemPrompt, historico, maxTokens);
   }
 
+  async scoringAtendimento(historico: MensagemChat[]): Promise<{
+    nota: number;
+    pontos_positivos: string[];
+    pontos_melhorar: string[];
+    detalhes: string[];
+  } | null> {
+    const conversaTexto = historico
+      .map(m => `${m.role === 'user' ? 'Cliente' : 'Vendedora'}: ${m.content}`)
+      .join('\n');
+
+    try {
+      const resposta = await callAI(
+        'Voce e um avaliador de qualidade de atendimento em joalheria premium. Analise a conversa e de uma nota de 0 a 100 para a vendedora.',
+        [
+          {
+            role: 'user',
+            content: `Analise o atendimento da vendedora nesta conversa de joalheria e de uma nota de 0 a 100.
+Retorne APENAS o JSON, sem texto adicional.
+
+Criterios de avaliacao (cada um vale ate 20 pontos):
+1. Cordialidade e empatia (saudacao, tom amigavel, personalizacao)
+2. Coleta de informacoes (perguntar nome, ocasiao, orcamento, preferencias)
+3. Conhecimento do produto (explicar materiais, pedras, qualidades)
+4. Tecnica de venda (apresentar opcoes, criar urgencia, oferecer alternativas)
+5. Fechamento (direcionar para decisao, proximo passo, follow-up)
+
+Formato:
+{
+  "nota": 75,
+  "pontos_positivos": ["foi cordial e atenciosa", "perguntou sobre a ocasiao"],
+  "pontos_melhorar": ["nao perguntou o orcamento", "nao ofereceu alternativas"],
+  "detalhes": ["Cordialidade: 18/20", "Coleta: 12/20", "Produto: 15/20", "Venda: 15/20", "Fechamento: 15/20"]
+}
+
+CONVERSA:
+${conversaTexto}`,
+          },
+        ],
+        512,
+      );
+
+      const jsonMatch = resposta.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        nota: Math.min(100, Math.max(0, parsed.nota || 0)),
+        pontos_positivos: parsed.pontos_positivos || [],
+        pontos_melhorar: parsed.pontos_melhorar || [],
+        detalhes: parsed.detalhes || [],
+      };
+    } catch (error) {
+      console.error('Erro ao gerar scoring:', error);
+      return null;
+    }
+  }
+
   async extrairBANT(historico: MensagemChat[]): Promise<BANTResult | null> {
     const conversaTexto = historico
-      .map(m => `${m.role === 'user' ? 'Cliente' : 'Dara'}: ${m.content}`)
+      .map(m => `${m.role === 'user' ? 'Cliente' : 'Agente'}: ${m.content}`)
       .join('\n');
 
     try {

@@ -1,7 +1,19 @@
 import axios from 'axios';
 
+// Para producao mobile, altere a URL abaixo para o endereco do servidor
+const API_URL_MOBILE = 'http://192.168.31.238:3001/api';
+
+const getBaseURL = () => {
+  // Capacitor native app: usa URL do servidor
+  if ((window as any).Capacitor?.isNativePlatform()) {
+    return API_URL_MOBILE;
+  }
+  // Browser: usa proxy do Vite
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: getBaseURL(),
 });
 
 api.interceptors.request.use((config) => {

@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronUp, ArrowLeft, Loader2, Pencil, Copy, Wand2, X, Check,
   Search, AlertTriangle, CheckCircle, XCircle, ArrowRight,
   Paperclip, Camera, Video, Mic, FileText, Play, Pause, Download,
+  Target, RefreshCw, Flame, ThermometerSun, Snowflake, List,
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -185,6 +186,7 @@ export default function AgentesIA() {
   const [carregando, setCarregando] = useState(true);
   const [agenteSelecionado, setAgenteSelecionado] = useState<Agente | null>(null);
   const [tela, setTela] = useState<'lista' | 'criar' | 'editar' | 'simular'>('lista');
+  const [abaGlobal, setAbaGlobal] = useState<'agentes' | 'qualificacao'>('agentes');
 
   useEffect(() => {
     carregarAgentes();
@@ -227,6 +229,13 @@ export default function AgentesIA() {
     } catch {}
   };
 
+  const toggleAtivoAgente = async (ag: Agente) => {
+    try {
+      await api.put(`/agentes-ia/${ag.id}`, { ativo: ag.ativo ? 0 : 1 });
+      carregarAgentes();
+    } catch {}
+  };
+
   if (tela === 'criar' || tela === 'editar') {
     return <FormAgente agente={agenteSelecionado} onVoltar={voltar} onSalvo={voltar} />;
   }
@@ -236,9 +245,9 @@ export default function AgentesIA() {
   }
 
   return (
-    <div className="h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="h-full flex flex-col">
+      {/* Header com abas */}
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <Bot className="text-alisson-500" size={24} />
           <div>
@@ -246,74 +255,123 @@ export default function AgentesIA() {
             <p className="text-xs text-gray-500">Crie e gerencie seus agentes inteligentes</p>
           </div>
         </div>
+        {abaGlobal === 'agentes' && (
+          <button
+            onClick={abrirCriar}
+            className="flex items-center gap-2 px-4 py-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            <Plus size={18} />
+            Novo Agente
+          </button>
+        )}
+      </div>
+
+      {/* Abas globais */}
+      <div className="flex gap-1 border-b border-gray-200 mb-6">
         <button
-          onClick={abrirCriar}
-          className="flex items-center gap-2 px-4 py-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-xl text-sm font-medium transition-colors"
+          onClick={() => setAbaGlobal('agentes')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            abaGlobal === 'agentes' ? 'border-alisson-500 text-alisson-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
         >
-          <Plus size={18} />
-          Novo Agente
+          <Bot size={16} />
+          Agentes
+        </button>
+        <button
+          onClick={() => setAbaGlobal('qualificacao')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            abaGlobal === 'qualificacao' ? 'border-alisson-500 text-alisson-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Target size={16} />
+          Qualificacao
         </button>
       </div>
 
-      {/* Lista de agentes */}
-      {carregando ? (
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="animate-spin text-alisson-500" size={32} />
-        </div>
-      ) : agentes.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-gray-400">
-          <Bot size={48} className="mb-3 opacity-30" />
-          <p className="font-medium text-gray-500">Nenhum agente criado</p>
-          <p className="text-sm mt-1">Clique em "Novo Agente" para comecar</p>
-        </div>
+      {abaGlobal === 'qualificacao' ? (
+        <QualificacaoLocalPanel />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {agentes.map(ag => (
-            <div key={ag.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-              <div className="flex items-start gap-3 mb-4">
-                {ag.foto_url ? (
-                  <img src={ag.foto_url} alt={ag.nome} className="w-12 h-12 rounded-full object-cover border-2 border-alisson-200" />
-                ) : (
-                  <div className="w-12 h-12 rounded-full bg-alisson-100 flex items-center justify-center flex-shrink-0">
-                    <Bot size={22} className="text-alisson-500" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-800 truncate">{ag.nome}</h3>
-                  <span className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${AREA_CORES[ag.area] || 'bg-gray-100 text-gray-600'}`}>
-                    {AREAS.find(a => a.valor === ag.area)?.label || ag.area}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-xs text-gray-400 mb-4 line-clamp-2">
-                {ag.prompt_sistema ? ag.prompt_sistema.substring(0, 120) + '...' : 'Sem prompt configurado'}
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => abrirSimular(ag)}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-alisson-50 hover:bg-alisson-100 text-alisson-700 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <Send size={14} />
-                  Simular
-                </button>
-                <button
-                  onClick={() => abrirEditar(ag)}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => excluirAgente(ag.id)}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg text-xs font-medium transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
+        <>
+          {/* Lista de agentes */}
+          {carregando ? (
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="animate-spin text-alisson-500" size={32} />
             </div>
-          ))}
-        </div>
+          ) : agentes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+              <Bot size={48} className="mb-3 opacity-30" />
+              <p className="font-medium text-gray-500">Nenhum agente criado</p>
+              <p className="text-sm mt-1">Clique em "Novo Agente" para comecar</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {agentes.map(ag => (
+                <div key={ag.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="relative flex-shrink-0">
+                      {ag.foto_url ? (
+                        <img src={ag.foto_url} alt={ag.nome} className={`w-12 h-12 rounded-full object-cover border-2 ${ag.ativo ? 'border-alisson-200' : 'border-gray-300 opacity-50'}`} />
+                      ) : (
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center ${ag.ativo ? 'bg-alisson-100' : 'bg-gray-100'}`}>
+                          <Bot size={22} className={ag.ativo ? 'text-alisson-500' : 'text-gray-400'} />
+                        </div>
+                      )}
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${ag.ativo ? 'bg-green-400' : 'bg-gray-400'}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className={`font-semibold truncate ${ag.ativo ? 'text-gray-800' : 'text-gray-400'}`}>{ag.nome}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${AREA_CORES[ag.area] || 'bg-gray-100 text-gray-600'}`}>
+                          {AREAS.find(a => a.valor === ag.area)?.label || ag.area}
+                        </span>
+                        <span className={`text-xs ${ag.ativo ? 'text-green-600' : 'text-gray-400'}`}>
+                          {ag.ativo ? 'Ativo' : 'Pausado'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400 mb-4 line-clamp-2">
+                    {ag.prompt_sistema ? ag.prompt_sistema.substring(0, 120) + '...' : 'Sem prompt configurado'}
+                  </p>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => abrirSimular(ag)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-alisson-50 hover:bg-alisson-100 text-alisson-700 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <Send size={14} />
+                      Simular
+                    </button>
+                    <button
+                      onClick={() => toggleAtivoAgente(ag)}
+                      title={ag.ativo ? 'Pausar agente' : 'Ativar agente'}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium transition-colors ${
+                        ag.ativo
+                          ? 'bg-green-50 hover:bg-orange-50 text-green-600 hover:text-orange-500'
+                          : 'bg-orange-50 hover:bg-green-50 text-orange-500 hover:text-green-600'
+                      }`}
+                    >
+                      {ag.ativo ? <Pause size={14} /> : <Play size={14} />}
+                    </button>
+                    <button
+                      onClick={() => abrirEditar(ag)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 hover:bg-gray-100 text-gray-600 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      onClick={() => excluirAgente(ag.id)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-gray-50 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -422,7 +480,7 @@ function FormAgente({ agente, onVoltar, onSalvo }: { agente: Agente | null; onVo
             <input
               value={nome}
               onChange={e => setNome(e.target.value)}
-              placeholder="Ex: Luma, Dara, Sofia..."
+              placeholder="Ex: Luma, Sofia, Ana..."
               className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-alisson-400 focus:border-alisson-400"
             />
           </div>
@@ -567,6 +625,111 @@ function MidiaChat({ midia, isLead }: { midia: MidiaSim; isLead: boolean }) {
   );
 }
 
+// ─── Qualificacao Panel (Local) ───────────────────────────────────────────────
+
+const CLS_CORES: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
+  QUENTE: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: <Flame size={14} className="text-red-500" /> },
+  MORNO: { bg: 'bg-yellow-50 border-yellow-200', text: 'text-yellow-700', icon: <ThermometerSun size={14} className="text-yellow-500" /> },
+  FRIO: { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-700', icon: <Snowflake size={14} className="text-blue-500" /> },
+  DESCARTE: { bg: 'bg-gray-50 border-gray-200', text: 'text-gray-500', icon: <Trash2 size={14} className="text-gray-400" /> },
+};
+
+function QualificacaoLocalPanel() {
+  const [leads, setLeads] = useState<any[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [filtroClass, setFiltroClass] = useState('');
+
+  useEffect(() => { carregarLeads(); }, []);
+
+  const carregarLeads = async (cls?: string) => {
+    setCarregando(true);
+    try {
+      const p = cls ? `?classificacao=${cls}&limite=100` : '?limite=100';
+      const res = await api.get(`/sdr-agent/qualificacao/leads${p}`);
+      setLeads(res.data);
+    } catch {}
+    finally { setCarregando(false); }
+  };
+
+  const classificacoes = ['QUENTE', 'MORNO', 'FRIO', 'DESCARTE'];
+  const totalPorCls = classificacoes.reduce((acc, c) => { acc[c] = leads.filter(l => l.classificacao === c).length; return acc; }, {} as Record<string, number>);
+
+  if (carregando) return <div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-alisson-500" size={32} /></div>;
+
+  return (
+    <div className="flex-1 overflow-y-auto space-y-5 pb-6">
+      {/* Cards resumo */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {classificacoes.map(c => {
+          const cor = CLS_CORES[c];
+          return (
+            <button key={c} onClick={() => { setFiltroClass(filtroClass === c ? '' : c); carregarLeads(filtroClass === c ? undefined : c); }}
+              className={`rounded-xl border p-4 text-left transition-all ${filtroClass === c ? 'ring-2 ring-alisson-500' : ''} ${cor.bg}`}>
+              <div className="flex items-center gap-2 mb-1">{cor.icon}<span className={`text-xs font-semibold uppercase ${cor.text}`}>{c}</span></div>
+              <p className={`text-2xl font-bold ${cor.text}`}>{totalPorCls[c] || 0}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2"><List size={20} className="text-alisson-500" /> Clientes Qualificados</h3>
+          <div className="flex gap-1">
+            <button onClick={() => { setFiltroClass(''); carregarLeads(); }} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${!filtroClass ? 'bg-alisson-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Todos</button>
+            {classificacoes.map(c => {
+              const cor = CLS_CORES[c];
+              return <button key={c} onClick={() => { setFiltroClass(c); carregarLeads(c); }} className={`px-3 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${filtroClass === c ? 'bg-alisson-500 text-white' : `${cor.bg} ${cor.text} hover:opacity-80`}`}>{cor.icon}{c}</button>;
+            })}
+          </div>
+        </div>
+        {leads.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <Target size={40} className="mx-auto mb-2 opacity-30" />
+            <p>Nenhum lead qualificado ainda</p>
+            <p className="text-xs mt-1">Os leads serao qualificados automaticamente durante as conversas</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Telefone</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Nota</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Class.</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Necessidade</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Orcamento</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Prazo</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Decisor</th>
+                  <th className="text-left py-2 px-2 text-gray-500 font-medium">Atualizado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((l: any) => {
+                  const cor = CLS_CORES[l.classificacao] || CLS_CORES.FRIO;
+                  const sc = l.lead_score >= 80 ? 'text-green-600' : l.lead_score >= 55 ? 'text-yellow-600' : 'text-red-500';
+                  return (
+                    <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="py-2.5 px-2 font-mono text-xs text-gray-700">{l.telefone ? `...${l.telefone.slice(-4)}` : '-'}</td>
+                      <td className="py-2.5 px-2"><span className={`font-bold ${sc}`}>{l.lead_score}</span><span className="text-gray-400 text-xs">/150</span></td>
+                      <td className="py-2.5 px-2"><span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cor.bg} ${cor.text}`}>{cor.icon}{l.classificacao}</span></td>
+                      <td className="py-2.5 px-2 text-xs text-gray-600 max-w-[120px] truncate">{l.bant_need || <span className="text-gray-300">-</span>}{l.bant_need_score > 0 && <span className="text-alisson-500 ml-1">({l.bant_need_score})</span>}</td>
+                      <td className="py-2.5 px-2 text-xs text-gray-600">{l.bant_budget || <span className="text-gray-300">-</span>}{l.bant_budget_score > 0 && <span className="text-alisson-500 ml-1">({l.bant_budget_score})</span>}</td>
+                      <td className="py-2.5 px-2 text-xs text-gray-600">{l.bant_timeline || <span className="text-gray-300">-</span>}{l.bant_timeline_score > 0 && <span className="text-alisson-500 ml-1">({l.bant_timeline_score})</span>}</td>
+                      <td className="py-2.5 px-2 text-xs text-gray-600">{l.bant_authority || <span className="text-gray-300">-</span>}{l.bant_authority_score > 0 && <span className="text-alisson-500 ml-1">({l.bant_authority_score})</span>}</td>
+                      <td className="py-2.5 px-2 text-xs text-gray-400 whitespace-nowrap">{l.atualizado_em ? new Date(l.atualizado_em).toLocaleString('pt-BR') : '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Simulador ───────────────────────────────────────────────────────────────
 
 function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVoltar: () => void }) {
@@ -636,14 +799,14 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
 
       // Texto descritivo para a IA entender o que o lead enviou
       const descricoes: Record<string, string> = {
-        imagem: `[Lead enviou uma FOTO: ${file.name}]`,
-        video: `[Lead enviou um VIDEO: ${file.name}]`,
+        imagem: `[Cliente enviou uma FOTO: ${file.name}]`,
+        video: `[Cliente enviou um VIDEO: ${file.name}]`,
         audio: data.transcricao
-          ? `[Lead enviou um AUDIO. Transcricao: "${data.transcricao}"]`
-          : `[Lead enviou um AUDIO de ${formatarTamanho(file.size)}]`,
-        documento: `[Lead enviou um DOCUMENTO: ${file.name} (${formatarTamanho(file.size)})]`,
+          ? `[Cliente enviou um AUDIO. Transcricao: "${data.transcricao}"]`
+          : `[Cliente enviou um AUDIO de ${formatarTamanho(file.size)}]`,
+        documento: `[Cliente enviou um DOCUMENTO: ${file.name} (${formatarTamanho(file.size)})]`,
       };
-      const textoMidia = descricoes[data.tipo] || `[Lead enviou um arquivo: ${file.name}]`;
+      const textoMidia = descricoes[data.tipo] || `[Cliente enviou um arquivo: ${file.name}]`;
 
       await enviarComMidia(textoMidia, midia);
     } catch (e: any) {
@@ -1229,7 +1392,7 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
         <div className="w-72 flex flex-col gap-3 overflow-y-auto">
           {/* Score circular */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Lead Score</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Pontuacao</p>
             <div className="relative w-24 h-24 mx-auto">
               <svg width="96" height="96" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="42" fill="none" stroke="#f3f4f6" strokeWidth="8" />

@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS sdr_agent_config (
   deadline_pos_venda INTEGER DEFAULT 168,
   prompt_personalizado TEXT DEFAULT '',
   ultimo_polling TEXT,
-  criado_em TEXT DEFAULT (datetime('now')),
-  atualizado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 -- Snapshot do estado de cada lead no Kommo (para detectar deltas)
@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS sdr_agent_lead_snapshot (
   responsavel_id INTEGER,
   valor REAL DEFAULT 0,
   updated_at INTEGER,
-  criado_em TEXT DEFAULT (datetime('now')),
-  atualizado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshot_kommo_lead_id ON sdr_agent_lead_snapshot(kommo_lead_id);
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS sdr_agent_log (
   descricao TEXT NOT NULL,
   acao_tomada TEXT,
   notificado INTEGER DEFAULT 0,
-  criado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_sdr_log_tipo ON sdr_agent_log(tipo);

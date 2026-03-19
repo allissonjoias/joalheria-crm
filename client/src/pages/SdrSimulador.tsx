@@ -123,7 +123,7 @@ export default function SdrSimulador() {
               <Bot size={20} />
             </div>
             <div>
-              <p className="font-semibold text-sm">Dara — Alisson Joias</p>
+              <p className="font-semibold text-sm">Agente SDR — Alisson Joias</p>
               <p className="text-xs text-alisson-200">Consultora virtual</p>
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function SdrSimulador() {
           {historico.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 text-center">
               <Bot size={48} className="mb-3 opacity-30" />
-              <p className="font-medium text-gray-500">Simulador da Dara</p>
+              <p className="font-medium text-gray-500">Simulador do Agente</p>
               <p className="text-sm mt-1">Digite uma mensagem como se fosse um lead novo</p>
               <p className="text-xs mt-3 text-gray-400">ou escolha uma mensagem rapida abaixo</p>
             </div>
@@ -209,7 +209,7 @@ export default function SdrSimulador() {
           {transferirHumano && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-sm text-orange-700 flex items-center gap-2">
               <Zap size={16} />
-              <span>Dara solicitou transferencia para atendente humano</span>
+              <span>Agente solicitou transferencia para atendente humano</span>
             </div>
           )}
         </div>
@@ -255,7 +255,7 @@ export default function SdrSimulador() {
 
         {/* Score */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Lead Score</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pontuacao</p>
           <div className="flex items-end gap-2 mb-2">
             <span className={`text-4xl font-bold ${scoreColor}`}>{leadScore}</span>
             <span className="text-gray-400 text-sm mb-1">/150</span>

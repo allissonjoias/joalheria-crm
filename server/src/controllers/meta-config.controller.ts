@@ -55,7 +55,7 @@ export class MetaConfigController {
           `UPDATE meta_config SET
             page_id = ?, whatsapp_phone_number_id = ?,
             instagram_business_account_id = ?, access_token = ?,
-            webhook_verify_token = ?, atualizado_em = datetime('now')
+            webhook_verify_token = ?, atualizado_em = datetime('now', 'localtime')
            WHERE id = ?`
         ).run(
           page_id, whatsapp_phone_number_id,

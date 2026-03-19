@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS sdr_lead_qualificacao (
   kommo_pipeline_id INTEGER,
   kommo_status_id INTEGER,
   ultima_interacao TEXT,
-  criado_em TEXT DEFAULT (datetime('now')),
-  atualizado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_sdr_qual_telefone ON sdr_lead_qualificacao(telefone);

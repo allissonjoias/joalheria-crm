@@ -110,7 +110,7 @@ export class ChatController {
       ).run(assistantMsgId, conversa_id, 'assistant', resposta);
 
       // Update conversation timestamp
-      db.prepare("UPDATE conversas SET atualizado_em = datetime('now') WHERE id = ?").run(conversa_id);
+      db.prepare("UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?").run(conversa_id);
 
       // Extract data asynchronously
       let dadosExtraidos = null;
@@ -163,7 +163,7 @@ export class ChatController {
       const existing = db.prepare('SELECT id FROM dara_config LIMIT 1').get() as any;
       if (existing) {
         db.prepare(
-          "UPDATE dara_config SET prompt_personalizado = ?, atualizado_em = datetime('now') WHERE id = ?"
+          "UPDATE dara_config SET prompt_personalizado = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
         ).run(prompt_personalizado || '', existing.id);
       } else {
         db.prepare(
@@ -199,7 +199,36 @@ export class ChatController {
     }
   }
 
-  // --- Consultar Dara (Q&A para consultoras) ---
+  // --- Ajuda CRM (assistente para duvidas do sistema) ---
+
+  async ajudaCrm(req: Request, res: Response) {
+    try {
+      const { pergunta, historico } = req.body;
+
+      if (!pergunta) return res.status(400).json({ erro: 'Pergunta e obrigatoria' });
+
+      const messages: MensagemChat[] = [];
+
+      if (historico && Array.isArray(historico)) {
+        for (const msg of historico) {
+          messages.push({
+            role: msg.role as 'user' | 'assistant',
+            content: msg.content,
+          });
+        }
+      }
+
+      messages.push({ role: 'user', content: pergunta });
+
+      const resposta = await claudeService.ajudaCrm(messages);
+      res.json({ resposta });
+    } catch (error: any) {
+      console.error('Erro na ajuda CRM:', error);
+      res.status(500).json({ erro: error.message });
+    }
+  }
+
+  // --- Consultar IA (Q&A para consultoras) ---
 
   async consultarDara(req: Request, res: Response) {
     try {

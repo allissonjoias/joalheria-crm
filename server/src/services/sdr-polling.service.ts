@@ -1,5 +1,4 @@
-import { getDb } from '../config/database';
-import { KommoService } from './kommo.service';
+import { getDb, saveDb } from '../config/database';
 import { SdrEventDetectorService, SdrEvento } from './sdr-event-detector.service';
 
 interface SdrConfig {
@@ -19,10 +18,7 @@ interface SdrConfig {
   ultimo_polling: string | null;
 }
 
-const STATUS_VENDA_IDS = [142, 143]; // IDs tipicos de "venda fechada" no Kommo - configuravel
-
 export class SdrPollingService {
-  private kommo = new KommoService();
   private detector = new SdrEventDetectorService();
 
   getConfig(): SdrConfig {
@@ -51,94 +47,105 @@ export class SdrPollingService {
 
     if (campos.length === 0) return;
 
-    campos.push("atualizado_em = datetime('now')");
+    campos.push("atualizado_em = datetime('now', 'localtime')");
     db.prepare(`UPDATE sdr_agent_config SET ${campos.join(', ')} WHERE id = 1`).run(...valores);
+    saveDb();
   }
 
   async executarPolling(): Promise<SdrEvento[]> {
     const db = getDb();
     const config = this.getConfig();
-
-    // Determinar timestamp do ultimo polling
-    let updatedSince: number;
-    if (config.ultimo_polling) {
-      updatedSince = Math.floor(new Date(config.ultimo_polling).getTime() / 1000);
-    } else {
-      // Primeira vez: buscar leads das ultimas 24h
-      updatedSince = Math.floor(Date.now() / 1000) - 86400;
-    }
-
     const todosEventos: SdrEvento[] = [];
 
     try {
-      // 1. Buscar leads atualizados
-      const leadsData = await this.kommo.fetchLeadsAtualizados(updatedSince);
-      const leadsKommo = leadsData?._embedded?.leads || [];
+      // 1. Buscar deals atualizados desde ultimo polling
+      let filtroData = '';
+      const params: any[] = [];
+      if (config.ultimo_polling) {
+        filtroData = " AND p.atualizado_em > ?";
+        params.push(config.ultimo_polling);
+      } else {
+        // Primeira vez: deals das ultimas 24h
+        filtroData = " AND p.atualizado_em > datetime('now', '-24 hours')";
+      }
+
+      const dealsAtualizados = db.prepare(`
+        SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone
+        FROM pipeline p
+        LEFT JOIN clientes c ON p.cliente_id = c.id
+        WHERE 1=1 ${filtroData}
+        ORDER BY p.atualizado_em DESC
+      `).all(...params) as any[];
 
       // 2. Carregar snapshots existentes
-      const snapshotMap = new Map<number, any>();
-      if (leadsKommo.length > 0) {
-        const ids = leadsKommo.map((l: any) => l.id);
+      const snapshotMap = new Map<string, any>();
+      if (dealsAtualizados.length > 0) {
+        const ids = dealsAtualizados.map(d => d.id);
         const placeholders = ids.map(() => '?').join(',');
         const snapshots = db.prepare(
-          `SELECT * FROM sdr_agent_lead_snapshot WHERE kommo_lead_id IN (${placeholders})`
+          `SELECT * FROM sdr_agent_lead_snapshot WHERE deal_id IN (${placeholders})`
         ).all(...ids);
         for (const s of snapshots) {
-          snapshotMap.set((s as any).kommo_lead_id, s);
+          snapshotMap.set((s as any).deal_id, s);
         }
       }
 
-      // 3. Detectar eventos
-      const eventosLeads = this.detector.detectarEventos(leadsKommo, snapshotMap, STATUS_VENDA_IDS);
-      todosEventos.push(...eventosLeads);
+      // 3. Buscar estagios do tipo 'ganho' para detectar vendas
+      const estagiosGanho = db.prepare(
+        "SELECT nome FROM funil_estagios WHERE tipo = 'ganho' AND ativo = 1"
+      ).all().map((e: any) => e.nome);
 
-      // 4. Atualizar snapshots
-      for (const lead of leadsKommo) {
+      // 4. Detectar eventos
+      const eventosDeals = this.detector.detectarEventos(dealsAtualizados, snapshotMap, estagiosGanho);
+      todosEventos.push(...eventosDeals);
+
+      // 5. Atualizar snapshots locais
+      for (const deal of dealsAtualizados) {
         db.prepare(`
-          INSERT INTO sdr_agent_lead_snapshot (kommo_lead_id, nome, pipeline_id, status_id, responsavel_id, valor, updated_at, atualizado_em)
-          VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(kommo_lead_id) DO UPDATE SET
+          INSERT INTO sdr_agent_lead_snapshot (deal_id, nome, estagio, valor, atualizado_em)
+          VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+          ON CONFLICT(deal_id) DO UPDATE SET
             nome = excluded.nome,
-            pipeline_id = excluded.pipeline_id,
-            status_id = excluded.status_id,
-            responsavel_id = excluded.responsavel_id,
+            estagio = excluded.estagio,
             valor = excluded.valor,
-            updated_at = excluded.updated_at,
-            atualizado_em = datetime('now')
+            atualizado_em = datetime('now', 'localtime')
         `).run(
-          lead.id,
-          lead.name || '',
-          lead.pipeline_id || 0,
-          lead.status_id || 0,
-          lead.responsible_user_id || 0,
-          lead.price || 0,
-          lead.updated_at || 0
+          deal.id,
+          deal.cliente_nome || deal.titulo || '',
+          deal.estagio || '',
+          deal.valor || 0
         );
       }
 
-      // 5. Buscar tasks vencidas
+      // 6. Buscar tarefas vencidas
       try {
-        const tasksData = await this.kommo.fetchTasksVencidas();
-        const tasks = tasksData?._embedded?.tasks || [];
-        const eventosTasksVencidas = this.detector.classificarTasksVencidas(tasks);
-        todosEventos.push(...eventosTasksVencidas);
+        const tarefasVencidas = db.prepare(`
+          SELECT t.*, c.nome as cliente_nome, p.titulo as deal_titulo
+          FROM tarefas t
+          LEFT JOIN clientes c ON t.cliente_id = c.id
+          LEFT JOIN pipeline p ON t.pipeline_id = p.id
+          WHERE t.status = 'pendente' AND t.data_vencimento < datetime('now', 'localtime')
+        `).all();
+        const eventosTarefas = this.detector.classificarTarefasVencidas(tarefasVencidas);
+        todosEventos.push(...eventosTarefas);
       } catch (e) {
-        console.error('[SDR] Erro ao buscar tasks vencidas:', e);
+        console.error('[SDR] Erro ao buscar tarefas vencidas:', e);
       }
 
-      // 6. Salvar log de cada evento
+      // 7. Salvar log de cada evento
       for (const evento of todosEventos) {
         db.prepare(
           `INSERT INTO sdr_agent_log (tipo, prioridade, lead_id, lead_nome, descricao) VALUES (?, ?, ?, ?, ?)`
         ).run(evento.tipo, evento.prioridade, evento.leadId || null, evento.leadNome || null, evento.descricao);
       }
 
-      // 7. Atualizar timestamp do ultimo polling
+      // 8. Atualizar timestamp do ultimo polling
       db.prepare(
-        "UPDATE sdr_agent_config SET ultimo_polling = datetime('now'), atualizado_em = datetime('now') WHERE id = 1"
+        "UPDATE sdr_agent_config SET ultimo_polling = datetime('now', 'localtime'), atualizado_em = datetime('now', 'localtime') WHERE id = 1"
       ).run();
+      saveDb();
 
-      console.log(`[SDR] Polling completo: ${leadsKommo.length} leads verificados, ${todosEventos.length} eventos detectados`);
+      console.log(`[SDR] Polling completo: ${dealsAtualizados.length} deals verificados, ${todosEventos.length} eventos detectados`);
     } catch (e) {
       console.error('[SDR] Erro no polling:', e);
     }
@@ -150,11 +157,28 @@ export class SdrPollingService {
     const db = getDb();
     const config = this.getConfig();
 
-    const snapshots = db.prepare('SELECT * FROM sdr_agent_lead_snapshot').all() as any[];
-    const eventos = this.detector.detectarInativos(snapshots, config.dias_inatividade);
+    // Buscar deals que nao foram atualizados ha mais de X dias (excluir ganhos/perdidos)
+    const estagiosFinais = db.prepare(
+      "SELECT nome FROM funil_estagios WHERE tipo IN ('ganho', 'perdido') AND ativo = 1"
+    ).all().map((e: any) => e.nome);
+
+    let filtroEstagios = '';
+    if (estagiosFinais.length > 0) {
+      const placeholders = estagiosFinais.map(() => '?').join(',');
+      filtroEstagios = ` AND p.estagio NOT IN (${placeholders})`;
+    }
+
+    const dealsInativos = db.prepare(`
+      SELECT p.*, c.nome as cliente_nome
+      FROM pipeline p
+      LEFT JOIN clientes c ON p.cliente_id = c.id
+      WHERE p.atualizado_em < datetime('now', '-${config.dias_inatividade} days')
+      ${filtroEstagios}
+    `).all(...estagiosFinais) as any[];
+
+    const eventos = this.detector.detectarInativos(dealsInativos, config.dias_inatividade);
 
     for (const evento of eventos) {
-      // Evitar duplicatas: so loga se nao houver log recente do mesmo lead inativo
       const recente = db.prepare(
         "SELECT id FROM sdr_agent_log WHERE tipo = 'lead_inativo' AND lead_id = ? AND criado_em > datetime('now', '-24 hours')"
       ).get(evento.leadId);
@@ -166,6 +190,7 @@ export class SdrPollingService {
       }
     }
 
+    saveDb();
     console.log(`[SDR] Verificacao de inativos: ${eventos.length} leads inativos detectados`);
     return eventos;
   }
@@ -203,11 +228,19 @@ export class SdrPollingService {
       "SELECT prioridade, COUNT(*) as total FROM sdr_agent_log WHERE criado_em > datetime('now', '-24 hours') GROUP BY prioridade"
     ).all() as any[];
 
+    // Stats locais
+    const totalDeals = (db.prepare('SELECT COUNT(*) as c FROM pipeline').get() as any)?.c || 0;
+    const tarefasPendentes = (db.prepare("SELECT COUNT(*) as c FROM tarefas WHERE status = 'pendente'").get() as any)?.c || 0;
+    const tarefasVencidas = (db.prepare("SELECT COUNT(*) as c FROM tarefas WHERE status = 'pendente' AND data_vencimento < datetime('now', 'localtime')").get() as any)?.c || 0;
+
     return {
       total_logs: total?.total || 0,
       logs_hoje: hoje?.total || 0,
       por_tipo: porTipo,
       por_prioridade: porPrioridade,
+      total_deals: totalDeals,
+      tarefas_pendentes: tarefasPendentes,
+      tarefas_vencidas: tarefasVencidas,
     };
   }
 }

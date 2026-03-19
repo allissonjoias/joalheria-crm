@@ -31,6 +31,28 @@ function getAuthDir(instanceId: string): string {
   return path.join(BASE_AUTH_DIR, instanceId);
 }
 
+/**
+ * Resolve a WhatsApp LID to a real phone number using lid-mapping files.
+ * Searches instance-specific dir first, then base auth dir.
+ */
+export function resolveLid(lidId: string, instanceId?: string): string | null {
+  const filename = `lid-mapping-${lidId}_reverse.json`;
+  const candidates: string[] = [];
+  if (instanceId) candidates.push(path.join(BASE_AUTH_DIR, instanceId, filename));
+  candidates.push(path.join(BASE_AUTH_DIR, filename));
+
+  for (const filepath of candidates) {
+    try {
+      if (fs.existsSync(filepath)) {
+        const raw = fs.readFileSync(filepath, 'utf-8');
+        const phone = JSON.parse(raw);
+        if (phone) return String(phone).replace(/\D/g, '');
+      }
+    } catch {}
+  }
+  return null;
+}
+
 function getState(instanceId: string): InstanceState {
   if (!instances.has(instanceId)) {
     instances.set(instanceId, { sock: null, qr: null, connecting: false });
@@ -215,7 +237,20 @@ export class EvolutionService {
           const remoteJid = msg.key.remoteJid;
           if (!remoteJid || remoteJid.includes('@g.us') || remoteJid === 'status@broadcast') continue;
 
-          const telefone = remoteJid.replace('@s.whatsapp.net', '');
+          // Handle both @s.whatsapp.net and @lid (Linked ID) formats
+          let telefone = remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '');
+
+          // For LID format: resolve real phone number from lid-mapping files
+          if (remoteJid.endsWith('@lid')) {
+            const lidId = telefone;
+            const resolved = resolveLid(lidId, capturedInstanceId);
+            if (resolved) {
+              telefone = resolved;
+              console.log(`[WA:${nomeInstancia}] LID ${lidId} -> telefone real: ${telefone}`);
+            } else {
+              console.log(`[WA:${nomeInstancia}] LID ${lidId} sem mapeamento de telefone`);
+            }
+          }
           const texto =
             msg.message.conversation ||
             msg.message.extendedTextMessage?.text ||
@@ -249,6 +284,8 @@ export class EvolutionService {
                     message: msg.message,
                     pushName: nome,
                     _rawMsg: msg, // Passa msg completa para download de mídia
+                    _resolvedPhone: telefone, // Telefone já resolvido (LID -> real)
+                    _instanceId: capturedInstanceId,
                   }],
                 },
               });
@@ -326,6 +363,19 @@ export class EvolutionService {
   // --- Enviar via qualquer instancia conectada ou uma especifica ---
 
   async enviarTexto(telefone: string, texto: string, instanceId?: string): Promise<any> {
+    const sock = this.getSock(instanceId);
+
+    // If telefone already contains @ (it's a full JID), use directly
+    if (telefone.includes('@')) {
+      return await sock.sendMessage(telefone, { text: texto });
+    }
+
+    const numero = this.normalizarTelefone(telefone);
+    const jid = `${numero}@s.whatsapp.net`;
+    return await sock.sendMessage(jid, { text: texto });
+  }
+
+  private getSock(instanceId?: string): ReturnType<typeof makeWASocket> {
     let sock: ReturnType<typeof makeWASocket> | null = null;
 
     if (instanceId) {
@@ -346,10 +396,7 @@ export class EvolutionService {
     if (!sock) {
       throw new Error('Nenhum WhatsApp conectado');
     }
-
-    const numero = this.normalizarTelefone(telefone);
-    const jid = `${numero}@s.whatsapp.net`;
-    return await sock.sendMessage(jid, { text: texto });
+    return sock;
   }
 
   async enviarMidia(
@@ -360,29 +407,16 @@ export class EvolutionService {
     caption?: string,
     instanceId?: string
   ): Promise<any> {
-    let sock: ReturnType<typeof makeWASocket> | null = null;
+    const sock = this.getSock(instanceId);
 
-    if (instanceId) {
-      const state = instances.get(instanceId);
-      if (!state?.sock || state.connecting) {
-        throw new Error('Instancia nao esta conectada');
-      }
-      sock = state.sock;
+    // If telefone already contains @ (full JID), use directly
+    let jid: string;
+    if (telefone.includes('@')) {
+      jid = telefone;
     } else {
-      for (const [, state] of instances) {
-        if (state.sock && !state.connecting) {
-          sock = state.sock;
-          break;
-        }
-      }
+      const numero = this.normalizarTelefone(telefone);
+      jid = `${numero}@s.whatsapp.net`;
     }
-
-    if (!sock) {
-      throw new Error('Nenhum WhatsApp conectado');
-    }
-
-    const numero = this.normalizarTelefone(telefone);
-    const jid = `${numero}@s.whatsapp.net`;
 
     if (tipo === 'imagem') {
       return await sock.sendMessage(jid, { image: buffer, mimetype, caption });
@@ -463,10 +497,22 @@ export class EvolutionService {
     }
   }
 
+  async buscarFotoPerfil(telefone: string): Promise<string | null> {
+    try {
+      const sock = this.getSock();
+      const numero = this.normalizarTelefone(telefone);
+      const jid = `${numero}@s.whatsapp.net`;
+      const url = await sock.profilePictureUrl(jid, 'image');
+      return url || null;
+    } catch {
+      return null;
+    }
+  }
+
   private updateInstanceStatus(instanceId: string, status: string) {
     const db = getDb();
     db.prepare(
-      "UPDATE whatsapp_instances SET status = ?, atualizado_em = datetime('now') WHERE id = ?"
+      "UPDATE whatsapp_instances SET status = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
     ).run(status, instanceId);
   }
 }

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
 
-export type Canal = 'whatsapp' | 'instagram_dm' | 'instagram_comment' | 'interno' | 'todos';
+export type Canal = 'whatsapp' | 'instagram_dm' | 'instagram_comment' | 'todos';
 
 export interface Conversa {
   id: string;
@@ -25,6 +25,8 @@ export interface Conversa {
   bant_timeline?: string;
   bant_qualificado?: number;
   bant_atualizado_em?: string;
+  foto_perfil?: string;
+  nao_lidas?: number;
 }
 
 export interface Mensagem {
@@ -55,6 +57,13 @@ export interface DadosExtraidos {
   resumo?: string;
 }
 
+export interface ScoringResult {
+  nota: number;
+  pontos_positivos: string[];
+  pontos_melhorar: string[];
+  detalhes: string[];
+}
+
 export function useMensageria() {
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -62,13 +71,17 @@ export function useMensageria() {
   const [enviando, setEnviando] = useState(false);
   const [conversaAtual, setConversaAtual] = useState<Conversa | null>(null);
   const [filtroCanal, setFiltroCanal] = useState<Canal>('todos');
+  const [scoring, setScoring] = useState<ScoringResult | null>(null);
+  const [scoringLoading, setScoringLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const carregarConversas = useCallback(async (canal?: Canal) => {
     try {
       const filtro = canal || filtroCanal;
       const params: any = {};
-      if (filtro !== 'todos') params.canal = filtro;
+      if (filtro !== 'todos') {
+        params.canal = filtro;
+      }
 
       const { data } = await api.get('/mensageria/conversas', { params });
       setConversas(data);
@@ -83,6 +96,9 @@ export function useMensageria() {
       setConversaAtual(data.conversa);
       setMensagens(data.mensagens);
       setDadosExtraidos(data.dadosExtraidos);
+      setScoring(null); // Reset scoring ao trocar conversa
+      // Zerar contador de nao lidas localmente
+      setConversas(prev => prev.map(c => c.id === id ? { ...c, nao_lidas: 0 } : c));
     } catch (e) {
       console.error('Erro ao carregar conversa:', e);
     }
@@ -248,6 +264,19 @@ export function useMensageria() {
     }
   };
 
+  const solicitarScoring = async () => {
+    if (!conversaAtual || scoringLoading) return;
+    setScoringLoading(true);
+    try {
+      const { data } = await api.post(`/mensageria/conversas/${conversaAtual.id}/scoring`);
+      setScoring(data);
+    } catch (e) {
+      console.error('Erro ao solicitar scoring:', e);
+    } finally {
+      setScoringLoading(false);
+    }
+  };
+
   // Polling every 5s
   useEffect(() => {
     carregarConversas();
@@ -268,6 +297,19 @@ export function useMensageria() {
     };
   }, [conversaAtual?.id, filtroCanal]);
 
+  const excluirConversa = async (id: string) => {
+    try {
+      await api.delete(`/mensageria/conversas/${id}`);
+      if (conversaAtual?.id === id) {
+        setConversaAtual(null);
+        setMensagens([]);
+      }
+      await carregarConversas();
+    } catch (e) {
+      console.error('Erro ao excluir conversa:', e);
+    }
+  };
+
   return {
     conversas,
     mensagens,
@@ -275,6 +317,8 @@ export function useMensageria() {
     enviando,
     conversaAtual,
     filtroCanal,
+    scoring,
+    scoringLoading,
     setFiltroCanal: (canal: Canal) => {
       setFiltroCanal(canal);
       carregarConversas(canal);
@@ -285,5 +329,7 @@ export function useMensageria() {
     enviarComDara,
     enviarMidia,
     toggleModoAuto,
+    solicitarScoring,
+    excluirConversa,
   };
 }

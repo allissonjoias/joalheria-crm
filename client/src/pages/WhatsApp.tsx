@@ -8,6 +8,7 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
+import { Tooltip } from '../components/ui/Tooltip';
 import { useWhatsApp, Instancia } from '../hooks/useWhatsApp';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -275,9 +276,11 @@ export default function WhatsAppPage() {
           <Button tamanho="sm" variante="ghost" onClick={carregarInstancias}>
             <RefreshCw size={14} />
           </Button>
-          <Button tamanho="sm" onClick={() => setModalNova(true)}>
-            <Plus size={14} /> Adicionar WhatsApp
-          </Button>
+          <Tooltip texto="Adicionar um novo numero de WhatsApp ao CRM. Escaneie o QR Code para conectar" posicao="left">
+            <Button tamanho="sm" onClick={() => setModalNova(true)}>
+              <Plus size={14} /> Adicionar WhatsApp
+            </Button>
+          </Tooltip>
         </div>
       </div>
 
@@ -315,9 +318,11 @@ export default function WhatsAppPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Anti-ban / Warmup */}
         <Card className="p-6">
-          <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
-            <Shield size={20} /> Protecao Anti-Ban
-          </h2>
+          <Tooltip texto="Sistema de protecao que limita envios diarios e respeita horario comercial para evitar bloqueios do WhatsApp" posicao="right">
+            <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
+              <Shield size={20} /> Protecao Anti-Ban
+            </h2>
+          </Tooltip>
 
           {warmup ? (
             <div className="space-y-4">
@@ -383,9 +388,11 @@ export default function WhatsAppPage() {
         {/* Campanhas */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-alisson-600 flex items-center gap-2">
-              <Zap size={20} /> Campanhas
-            </h2>
+            <Tooltip texto="Envie mensagens em massa para clientes selecionados com personalizacao automatica" posicao="right">
+              <h2 className="text-lg font-semibold text-alisson-600 flex items-center gap-2">
+                <Zap size={20} /> Campanhas
+              </h2>
+            </Tooltip>
             <div className="flex gap-2">
               <Button tamanho="sm" variante="ghost" onClick={carregarCampanhas}>
                 <RefreshCw size={14} />

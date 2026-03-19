@@ -69,7 +69,7 @@ export class AuthService {
 
     if (campos.length === 0) return;
 
-    campos.push("atualizado_em = datetime('now')");
+    campos.push("atualizado_em = datetime('now', 'localtime')");
     valores.push(id);
 
     db.prepare(`UPDATE usuarios SET ${campos.join(', ')} WHERE id = ?`).run(...valores);
@@ -89,6 +89,6 @@ export class AuthService {
     }
 
     const nova_hash = bcrypt.hashSync(novaSenha, 10);
-    db.prepare("UPDATE usuarios SET senha_hash = ?, atualizado_em = datetime('now') WHERE id = ?").run(nova_hash, usuarioId);
+    db.prepare("UPDATE usuarios SET senha_hash = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?").run(nova_hash, usuarioId);
   }
 }

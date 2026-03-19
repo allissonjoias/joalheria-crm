@@ -42,11 +42,23 @@ export interface InstagramCommentEvent {
   timestamp: string;
 }
 
+export interface InstagramMentionEvent {
+  type: 'instagram_mention';
+  mediaId: string;
+  commentId?: string;
+  senderId: string;
+  senderUsername: string;
+  text: string;
+  mediaUrl?: string;
+  timestamp: string;
+}
+
 export type WebhookEvent =
   | WhatsAppIncomingMessage
   | WhatsAppStatusUpdate
   | InstagramDMMessage
-  | InstagramCommentEvent;
+  | InstagramCommentEvent
+  | InstagramMentionEvent;
 
 export class WebhookService {
   parseWhatsAppPayload(body: any): WebhookEvent[] {
@@ -145,6 +157,22 @@ export class WebhookService {
               senderId: val.from?.id || '',
               senderUsername: val.from?.username || '',
               text: val.text || '',
+              timestamp: String(entry.time || Date.now()),
+            };
+            events.push(event);
+          }
+
+          // Instagram Mentions (tags em stories/posts)
+          if (change.field === 'mentions') {
+            const val = change.value;
+            const event: InstagramMentionEvent = {
+              type: 'instagram_mention',
+              mediaId: val.media_id || val.media?.id || '',
+              commentId: val.comment_id,
+              senderId: val.from?.id || '',
+              senderUsername: val.from?.username || '',
+              text: val.text || val.caption || '',
+              mediaUrl: val.media?.media_url,
               timestamp: String(entry.time || Date.now()),
             };
             events.push(event);

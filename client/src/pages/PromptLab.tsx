@@ -75,7 +75,7 @@ function EditorPrompt({
   );
 }
 
-// ─── Chat de teste (Dara Chat) ────────────────────────────────────────────────
+// ─── Chat de teste ────────────────────────────────────────────────────────────
 function ChatTestar({ endpoint }: { endpoint: string }) {
   const [mensagens, setMensagens] = useState<TestMsg[]>([]);
   const [input, setInput] = useState('');
@@ -112,7 +112,7 @@ function ChatTestar({ endpoint }: { endpoint: string }) {
             <Gem size={16} className="text-white" />
           </div>
           <div>
-            <h2 className="font-semibold text-alisson-600 text-sm">Testar Dara</h2>
+            <h2 className="font-semibold text-alisson-600 text-sm">Testar IA</h2>
             <p className="text-xs text-gray-400">Converse como se fosse um cliente</p>
           </div>
         </div>
@@ -128,7 +128,7 @@ function ChatTestar({ endpoint }: { endpoint: string }) {
         {mensagens.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <Gem size={40} className="mx-auto mb-3 text-gray-300" />
-            <p className="text-sm mb-2">Teste o prompt da Dara</p>
+            <p className="text-sm mb-2">Teste o prompt da IA</p>
             <div className="mt-4 flex flex-col gap-2 items-center">
               {['Oi, boa tarde!', 'Quero ver aliancas de casamento', 'Quanto custa um anel de noivado?'].map(s => (
                 <button key={s} onClick={() => setInput(s)} className="text-xs px-3 py-1.5 bg-white border border-gray-200 rounded-full text-gray-500 hover:border-alisson-300 hover:text-alisson-600 transition-colors">
@@ -142,7 +142,7 @@ function ChatTestar({ endpoint }: { endpoint: string }) {
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'} mb-1`}>
             <div className={`max-w-[80%] px-3 py-2 rounded-lg shadow-sm text-sm ${msg.role === 'user' ? 'bg-white rounded-tl-none text-gray-800' : 'bg-wa-bubble-out rounded-tr-none text-gray-800'}`}>
               <p className={`text-xs font-medium mb-1 ${msg.role === 'user' ? 'text-blue-600' : 'text-alisson-600'}`}>
-                {msg.role === 'user' ? 'Cliente (voce)' : 'Dara'}
+                {msg.role === 'user' ? 'Cliente (voce)' : 'Agente IA'}
               </p>
               <div className="whitespace-pre-wrap">{msg.content}</div>
             </div>
@@ -153,7 +153,7 @@ function ChatTestar({ endpoint }: { endpoint: string }) {
             <div className="bg-wa-bubble-out px-3 py-2 rounded-lg rounded-tr-none shadow-sm">
               <div className="flex items-center gap-2">
                 <Loader2 size={14} className="text-alisson-600 animate-spin" />
-                <p className="text-xs text-gray-400">Dara esta digitando...</p>
+                <p className="text-xs text-gray-400">IA esta digitando...</p>
               </div>
             </div>
           </div>
@@ -235,7 +235,7 @@ function ChatTestarSdr() {
               <Bot size={16} className="text-white" />
             </div>
             <div>
-              <h2 className="font-semibold text-alisson-600 text-sm">Testar Dara SDR</h2>
+              <h2 className="font-semibold text-alisson-600 text-sm">Testar Agente SDR</h2>
               <p className="text-xs text-gray-400">Simulacao com BANT em tempo real</p>
             </div>
           </div>
@@ -251,7 +251,7 @@ function ChatTestarSdr() {
           {msgs.length === 0 && (
             <div className="text-center py-8 text-gray-400">
               <Bot size={36} className="mx-auto mb-2 text-gray-300" />
-              <p className="text-sm">Teste o fluxo completo da Dara SDR</p>
+              <p className="text-sm">Teste o fluxo completo do Agente SDR</p>
               <p className="text-xs mt-1">O BANT e atualizado a cada resposta</p>
             </div>
           )}
@@ -259,7 +259,7 @@ function ChatTestarSdr() {
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-start' : 'justify-end'} mb-1`}>
               <div className={`max-w-[80%] px-3 py-2 rounded-lg shadow-sm text-sm ${msg.role === 'user' ? 'bg-white rounded-tl-none text-gray-800' : 'bg-wa-bubble-out rounded-tr-none text-gray-800'}`}>
                 <p className={`text-xs font-medium mb-1 ${msg.role === 'user' ? 'text-blue-600' : 'text-alisson-600'}`}>
-                  {msg.role === 'user' ? 'Lead (voce)' : 'Dara SDR'}
+                  {msg.role === 'user' ? 'Lead (voce)' : 'Agente SDR'}
                 </p>
                 <div className="whitespace-pre-wrap">{msg.content}</div>
               </div>
@@ -270,7 +270,7 @@ function ChatTestarSdr() {
               <div className="bg-wa-bubble-out px-3 py-2 rounded-lg rounded-tr-none shadow-sm">
                 <div className="flex items-center gap-2">
                   <Loader2 size={14} className="text-alisson-600 animate-spin" />
-                  <p className="text-xs text-gray-400">Dara esta digitando...</p>
+                  <p className="text-xs text-gray-400">IA esta digitando...</p>
                 </div>
               </div>
             </div>
@@ -372,10 +372,10 @@ export default function PromptLab() {
 
   return (
     <div className="flex flex-col h-full gap-3">
-      {/* Dara Chat */}
+      {/* Agente Chat */}
       <div className="flex gap-4 flex-1 min-h-0">
         <EditorPrompt
-          titulo="Prompt da Dara — Chat WhatsApp"
+          titulo="Prompt do Agente — Chat WhatsApp"
           prompt={promptChat}
           setPrompt={setPromptChat}
           promptOriginal={promptChatOriginal}
@@ -388,10 +388,10 @@ export default function PromptLab() {
 
       <div className="border-t border-gray-200" />
 
-      {/* Dara SDR */}
+      {/* Agente SDR */}
       <div className="flex gap-4 flex-1 min-h-0">
         <EditorPrompt
-          titulo="Prompt da Dara SDR"
+          titulo="Prompt do Agente SDR"
           prompt={promptSdr}
           setPrompt={setPromptSdr}
           promptOriginal={promptSdrOriginal}

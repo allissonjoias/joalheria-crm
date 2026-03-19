@@ -30,7 +30,7 @@ export default function Chat() {
   const [nomeCliente, setNomeCliente] = useState('');
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('consultar');
 
-  // Consultar Dara
+  // Consultar IA
   const [consultaPergunta, setConsultaPergunta] = useState('');
   const [consultaMsgs, setConsultaMsgs] = useState<ConsultaMsg[]>([]);
   const [consultando, setConsultando] = useState(false);
@@ -91,7 +91,7 @@ export default function Chat() {
     await carregarConversa(id);
   };
 
-  // Consultar Dara
+  // Consultar IA
   const handleConsultar = async () => {
     if (!consultaPergunta.trim() || consultando) return;
 
@@ -121,7 +121,7 @@ export default function Chat() {
       const errorMsg: ConsultaMsg = {
         id: 'e-' + Date.now(),
         role: 'assistant',
-        content: 'Erro ao consultar. Verifique se a chave da API Claude esta configurada.',
+        content: 'Erro ao consultar. Verifique se a chave da API esta configurada.',
       };
       setConsultaMsgs(prev => [...prev, errorMsg]);
     } finally {
@@ -150,7 +150,7 @@ export default function Chat() {
             }`}
           >
             <Sparkles size={16} />
-            Consultar Dara
+            Consultar IA
           </button>
           <button
             onClick={() => setTabAtiva('atendimentos')}
@@ -167,14 +167,14 @@ export default function Chat() {
         <button
           onClick={() => setConfigAberto(true)}
           className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 hover:text-alisson-600 hover:bg-gray-100 rounded-lg transition-colors"
-          title="Configurar prompt da Dara"
+          title="Configurar prompt da IA"
         >
           <Settings size={18} />
           Prompt
         </button>
       </div>
 
-      {/* Tab: Consultar Dara */}
+      {/* Tab: Consultar IA */}
       {tabAtiva === 'consultar' && (
         <div className="h-[calc(100%-3.5rem)] bg-white rounded-xl border border-gray-100 flex flex-col">
           {/* Header */}
@@ -184,7 +184,7 @@ export default function Chat() {
                 <Gem size={16} className="text-white" />
               </div>
               <div>
-                <h2 className="font-semibold text-alisson-600 text-sm">Dara IA</h2>
+                <h2 className="font-semibold text-alisson-600 text-sm">Assistente IA</h2>
                 <p className="text-xs text-gray-400">Assistente para consultoras</p>
               </div>
             </div>
@@ -204,9 +204,9 @@ export default function Chat() {
             {consultaMsgs.length === 0 && (
               <div className="text-center py-12 text-gray-400">
                 <Sparkles size={48} className="mx-auto mb-4 text-gray-300" />
-                <p className="text-lg mb-2">Pergunte a Dara</p>
+                <p className="text-lg mb-2">Pergunte a IA</p>
                 <p className="text-sm max-w-md mx-auto">
-                  Cole uma conversa de cliente, tire duvidas sobre produtos ou peca sugestoes de resposta. A Dara vai ajudar com base no conhecimento da Alisson.
+                  Cole uma conversa de cliente, tire duvidas sobre produtos ou peca sugestoes de resposta. A IA vai ajudar com base no conhecimento da Alisson.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-2 justify-center">
                   {[
@@ -241,7 +241,7 @@ export default function Chat() {
                     ))}
                   </div>
                   <p className="text-xs text-gray-400 mt-1">
-                    {msg.role === 'assistant' ? 'Dara IA' : 'Voce'}
+                    {msg.role === 'assistant' ? 'Agente IA' : 'Voce'}
                   </p>
                 </div>
               </div>
@@ -252,7 +252,7 @@ export default function Chat() {
                   <Loader2 size={16} className="text-white animate-spin" />
                 </div>
                 <div className="bg-gray-50 border border-gray-100 px-4 py-3 rounded-2xl rounded-tl-none">
-                  <p className="text-sm text-gray-400">Dara esta pensando...</p>
+                  <p className="text-sm text-gray-400">IA esta pensando...</p>
                 </div>
               </div>
             )}
@@ -329,7 +329,7 @@ export default function Chat() {
                 <div className="text-center">
                   <MessageSquare size={48} className="mx-auto mb-4 text-gray-300" />
                   <p className="text-lg">Selecione ou inicie uma conversa</p>
-                  <p className="text-sm mt-1">A Dara ira atender o cliente com IA</p>
+                  <p className="text-sm mt-1">A IA ira atender o cliente automaticamente</p>
                 </div>
               </div>
             )}
@@ -362,10 +362,10 @@ export default function Chat() {
       </Modal>
 
       {/* Modal: Configurar Prompt */}
-      <Modal aberto={configAberto} onFechar={() => setConfigAberto(false)} titulo="Configurar Prompt da Dara">
+      <Modal aberto={configAberto} onFechar={() => setConfigAberto(false)} titulo="Configurar Prompt da IA">
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Adicione instrucoes personalizadas para a Dara. Essas instrucoes serao adicionadas ao comportamento padrao dela nos atendimentos e nas consultas.
+            Adicione instrucoes personalizadas para a IA. Essas instrucoes serao adicionadas ao comportamento padrao nos atendimentos e nas consultas.
           </p>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -381,7 +381,7 @@ export default function Chat() {
           </div>
           <div className="bg-gray-50 rounded-lg p-3">
             <p className="text-xs text-gray-500">
-              A Dara ja tem conhecimento padrao sobre: identidade, tom de voz, produtos, precos, regras de atendimento e coleta de dados. Use este campo para adicionar instrucoes especificas como promocoes, regras de desconto, novos produtos ou orientacoes de campanha.
+              A IA ja tem conhecimento padrao sobre: identidade, tom de voz, produtos, precos, regras de atendimento e coleta de dados. Use este campo para adicionar instrucoes especificas como promocoes, regras de desconto, novos produtos ou orientacoes de campanha.
             </p>
           </div>
           <div className="flex gap-2 justify-end">

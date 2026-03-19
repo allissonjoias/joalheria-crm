@@ -5,8 +5,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
   api_key TEXT NOT NULL DEFAULT '',
   modelo TEXT DEFAULT '',
   ativo INTEGER DEFAULT 1,
-  criado_em TEXT DEFAULT (datetime('now')),
-  atualizado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 -- Inserir registros para cada provedor (modelos mais recentes - Mar 2026)

@@ -57,7 +57,7 @@ export class ApiKeysController {
       const keyToSave = api_key && !api_key.includes('...') ? api_key : existing.api_key;
 
       db.prepare(
-        "UPDATE api_keys SET api_key = ?, modelo = ?, atualizado_em = datetime('now') WHERE provider = ?"
+        "UPDATE api_keys SET api_key = ?, modelo = ?, atualizado_em = datetime('now', 'localtime') WHERE provider = ?"
       ).run(keyToSave, modelo || '', provider);
 
       // Atualizar env em runtime para efeito imediato

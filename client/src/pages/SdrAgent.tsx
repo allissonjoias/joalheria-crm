@@ -1,10 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Play, Square, RefreshCw, Send, Bell, Settings, Activity, Clock,
-  Zap, User, RotateCcw, ChevronDown, ChevronUp, MessageSquare,
+  Zap, User, RotateCcw, ChevronDown, ChevronUp, MessageSquare, Target,
+  CheckCircle, AlertTriangle, XCircle, Flame, Snowflake, ThermometerSun, Trash2,
+  Wand2, ArrowRight, List,
 } from 'lucide-react';
 import { useSdrAgent } from '../hooks/useSdrAgent';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 
 // --- Tipos e constantes do painel SDR ---
 const TIPOS_EVENTO = [
@@ -66,17 +69,23 @@ const MENSAGENS_RAPIDAS = [
 
 // --- Componente principal ---
 interface SdrAgentProps {
-  initialTab?: 'painel' | 'simulador';
+  initialTab?: 'painel' | 'simulador' | 'qualificacao';
   hideHeader?: boolean;
 }
 
 export default function SdrAgent({ initialTab = 'painel', hideHeader = false }: SdrAgentProps) {
-  const [aba, setAba] = useState<'painel' | 'simulador'>(initialTab);
+  const [aba, setAba] = useState<'painel' | 'simulador' | 'qualificacao'>(initialTab);
+
+  const abas: { id: typeof aba; label: string; icon: React.ReactNode }[] = [
+    { id: 'painel', label: 'Painel', icon: <Activity size={16} /> },
+    { id: 'qualificacao', label: 'Qualificacao', icon: <Target size={16} /> },
+    { id: 'simulador', label: 'Simulador', icon: <MessageSquare size={16} /> },
+  ];
 
   if (hideHeader) {
     return (
       <div className="flex flex-col h-full">
-        {aba === 'painel' ? <PainelSdr /> : <SimuladorDara />}
+        {aba === 'painel' ? <PainelSdr /> : aba === 'qualificacao' ? <QualificacaoLocal /> : <SimuladorAgente />}
       </div>
     );
   }
@@ -88,37 +97,29 @@ export default function SdrAgent({ initialTab = 'painel', hideHeader = false }: 
         <div className="flex items-center gap-3 pb-4">
           <Bot className="text-alisson-500" size={24} />
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Agente SDR — Dara</h1>
-            <p className="text-xs text-gray-500">Monitoramento automatico do Kommo CRM</p>
+            <h1 className="text-xl font-bold text-gray-800">Agente SDR</h1>
+            <p className="text-xs text-gray-500">Qualificacao automatica de leads</p>
           </div>
         </div>
         <div className="flex gap-1 ml-auto pb-0">
-          <button
-            onClick={() => setAba('painel')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              aba === 'painel'
-                ? 'border-alisson-500 text-alisson-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <Activity size={16} />
-            Painel
-          </button>
-          <button
-            onClick={() => setAba('simulador')}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              aba === 'simulador'
-                ? 'border-alisson-500 text-alisson-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            <MessageSquare size={16} />
-            Simulador Dara
-          </button>
+          {abas.map(a => (
+            <button
+              key={a.id}
+              onClick={() => setAba(a.id)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                aba === a.id
+                  ? 'border-alisson-500 text-alisson-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {a.icon}
+              {a.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {aba === 'painel' ? <PainelSdr /> : <SimuladorDara />}
+      {aba === 'painel' ? <PainelSdr /> : aba === 'qualificacao' ? <QualificacaoLocal /> : <SimuladorAgente />}
     </div>
   );
 }
@@ -365,12 +366,12 @@ function PainelSdr() {
               )}
               <div className="border-t pt-2 mt-2 flex flex-wrap gap-2">
                 {[
-                  { key: 'auto_criar_tasks', label: 'Tasks' },
-                  { key: 'auto_followup', label: 'Follow-up' },
+                  { key: 'auto_criar_tasks', label: 'Tarefas' },
+                  { key: 'auto_followup', label: 'Retorno' },
                   { key: 'auto_mover_leads', label: 'Pos-venda' },
                 ].map(({ key, label }) => (
                   <span key={key} className={`px-2 py-0.5 rounded text-xs ${(config as any)?.[key] ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {label} {(config as any)?.[key] ? 'ON' : 'OFF'}
+                    {label} {(config as any)?.[key] ? 'ATIVO' : 'INATIVO'}
                   </span>
                 ))}
               </div>
@@ -490,8 +491,463 @@ function PainelSdr() {
   );
 }
 
-// --- Simulador da Dara ---
-function SimuladorDara() {
+// --- Qualificacao Local ---
+interface LocalPipeline {
+  id: number;
+  name: string;
+  statuses: { id: number; name: string; pipeline_id: number }[];
+}
+
+interface QualConfig {
+  pipeline_id: number | null;
+  status_mapping: Record<string, number>;
+}
+
+interface LeadQualificado {
+  id: number;
+  telefone: string;
+  kommo_lead_id: number | null;
+  lead_score: number;
+  classificacao: string;
+  bant_need: string | null;
+  bant_budget: string | null;
+  bant_timeline: string | null;
+  bant_authority: string | null;
+  bant_need_score: number;
+  bant_budget_score: number;
+  bant_timeline_score: number;
+  bant_authority_score: number;
+  ultima_interacao: string | null;
+  atualizado_em: string;
+}
+
+const CLASSIFICACAO_CORES: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
+  QUENTE: { bg: 'bg-red-50 border-red-200', text: 'text-red-700', icon: <Flame size={14} className="text-red-500" /> },
+  MORNO: { bg: 'bg-yellow-50 border-yellow-200', text: 'text-yellow-700', icon: <ThermometerSun size={14} className="text-yellow-500" /> },
+  FRIO: { bg: 'bg-blue-50 border-blue-200', text: 'text-blue-700', icon: <Snowflake size={14} className="text-blue-500" /> },
+  DESCARTE: { bg: 'bg-gray-50 border-gray-200', text: 'text-gray-500', icon: <Trash2 size={14} className="text-gray-400" /> },
+};
+
+function QualificacaoLocal() {
+  const [pipelines, setPipelines] = useState<LocalPipeline[]>([]);
+  const [config, setConfig] = useState<QualConfig>({ pipeline_id: null, status_mapping: {} });
+  const [leads, setLeads] = useState<LeadQualificado[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
+  const [filtroClass, setFiltroClass] = useState('');
+  const [pipelineSelecionado, setPipelineSelecionado] = useState<number | null>(null);
+  const [mappingTemp, setMappingTemp] = useState<Record<string, number>>({});
+  const [abaQual, setAbaQual] = useState<'config' | 'leads'>('config');
+  const [criandoFunil, setCriandoFunil] = useState(false);
+
+  useEffect(() => {
+    carregarDados();
+  }, []);
+
+  const carregarDados = async () => {
+    setCarregando(true);
+    setErro(null);
+    try {
+      const [configRes, leadsRes] = await Promise.all([
+        api.get('/sdr-agent/qualificacao/config'),
+        api.get('/sdr-agent/qualificacao/leads?limite=100'),
+      ]);
+      setConfig(configRes.data);
+      setLeads(leadsRes.data);
+      setPipelineSelecionado(configRes.data.pipeline_id);
+      setMappingTemp(configRes.data.status_mapping || {});
+
+      // Carregar pipelines locais
+      try {
+        const pRes = await api.get('/sdr-agent/qualificacao/pipelines');
+        setPipelines(pRes.data);
+      } catch {
+        // Pipeline pode nao estar configurado
+      }
+    } catch (e: any) {
+      setErro(e.response?.data?.erro || e.message);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const carregarLeads = async (classificacao?: string) => {
+    try {
+      const params = classificacao ? `?classificacao=${classificacao}&limite=100` : '?limite=100';
+      const res = await api.get(`/sdr-agent/qualificacao/leads${params}`);
+      setLeads(res.data);
+    } catch (e: any) {
+      setErro(e.response?.data?.erro || e.message);
+    }
+  };
+
+  const autoMapear = async () => {
+    if (!pipelineSelecionado) return;
+    setErro(null);
+    try {
+      const res = await api.post('/sdr-agent/qualificacao/auto-mapear', { pipeline_id: pipelineSelecionado });
+      setMappingTemp(res.data.mapping);
+      setSucesso('Mapeamento automatico gerado. Revise e salve.');
+      setTimeout(() => setSucesso(null), 4000);
+    } catch (e: any) {
+      setErro(e.response?.data?.erro || e.message);
+    }
+  };
+
+  const salvarConfig = async () => {
+    if (!pipelineSelecionado) {
+      setErro('Selecione um pipeline primeiro');
+      return;
+    }
+    setSalvando(true);
+    setErro(null);
+    try {
+      await api.post('/sdr-agent/qualificacao/config', {
+        pipeline_id: pipelineSelecionado,
+        status_mapping: mappingTemp,
+      });
+      setConfig({ pipeline_id: pipelineSelecionado, status_mapping: mappingTemp });
+      setSucesso('Configuracao salva com sucesso!');
+      setTimeout(() => setSucesso(null), 3000);
+    } catch (e: any) {
+      setErro(e.response?.data?.erro || e.message);
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const handleFiltroClass = (cls: string) => {
+    setFiltroClass(cls);
+    carregarLeads(cls || undefined);
+  };
+
+  const pipelineAtual = pipelines.find(p => p.id === pipelineSelecionado);
+  const classificacoes = ['QUENTE', 'MORNO', 'FRIO', 'DESCARTE'];
+  const totalPorClass = classificacoes.reduce((acc, cls) => {
+    acc[cls] = leads.filter(l => l.classificacao === cls).length;
+    return acc;
+  }, {} as Record<string, number>);
+
+  if (carregando) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="animate-spin text-alisson-500" size={32} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto space-y-6 pb-6">
+      {erro && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <AlertTriangle size={16} />
+          {erro}
+        </div>
+      )}
+      {sucesso && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm flex items-center gap-2">
+          <CheckCircle size={16} />
+          {sucesso}
+        </div>
+      )}
+
+      {/* Sub-abas: Config / Leads */}
+      <div className="flex gap-2 border-b border-gray-200 pb-0">
+        <button
+          onClick={() => setAbaQual('config')}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            abaQual === 'config' ? 'border-alisson-500 text-alisson-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Settings size={15} />
+          Configuracao
+        </button>
+        <button
+          onClick={() => { setAbaQual('leads'); carregarLeads(filtroClass || undefined); }}
+          className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            abaQual === 'leads' ? 'border-alisson-500 text-alisson-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <List size={15} />
+          Leads Qualificados ({leads.length})
+        </button>
+      </div>
+
+      {/* Resumo rapido */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {classificacoes.map(cls => {
+          const cores = CLASSIFICACAO_CORES[cls];
+          return (
+            <div key={cls} className={`rounded-xl border p-4 ${cores.bg}`}>
+              <div className="flex items-center gap-2 mb-1">
+                {cores.icon}
+                <span className={`text-xs font-semibold uppercase ${cores.text}`}>{cls}</span>
+              </div>
+              <p className={`text-2xl font-bold ${cores.text}`}>{totalPorClass[cls] || 0}</p>
+            </div>
+          );
+        })}
+      </div>
+
+      {abaQual === 'config' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Selecao de Pipeline */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+              <Target size={20} className="text-alisson-500" />
+              Pipeline de Qualificacao
+            </h3>
+
+            {/* Botao criar funil de teste */}
+            <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <p className="text-xs text-purple-700 mb-2">
+                Crie um funil de teste com os estagios de qualificacao BANT ja configurados.
+              </p>
+              <button
+                onClick={async () => {
+                  setCriandoFunil(true);
+                  setErro(null);
+                  try {
+                    const res = await api.post('/sdr-agent/qualificacao/criar-funil-teste');
+                    setSucesso(`Funil criado! Pipeline ID: ${res.data.pipeline_id}. Mapeamento configurado automaticamente.`);
+                    setTimeout(() => setSucesso(null), 6000);
+                    await carregarDados();
+                  } catch (e: any) {
+                    setErro(e.response?.data?.erro || e.message);
+                  } finally {
+                    setCriandoFunil(false);
+                  }
+                }}
+                disabled={criandoFunil}
+                className="flex items-center gap-2 text-sm bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium disabled:opacity-50 transition-colors"
+              >
+                {criandoFunil ? <RefreshCw size={16} className="animate-spin" /> : <Wand2 size={16} />}
+                {criandoFunil ? 'Criando funil...' : 'Criar Funil de Teste'}
+              </button>
+            </div>
+
+            {pipelines.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <AlertTriangle size={32} className="mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Nenhum pipeline encontrado</p>
+                <p className="text-xs mt-1">Crie um funil de teste para comecar</p>
+                <button
+                  onClick={carregarDados}
+                  className="mt-3 text-sm text-alisson-500 hover:text-alisson-600 font-medium"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <label className="block text-xs font-medium text-gray-600 mb-1">Selecione o funil de qualificacao</label>
+                <select
+                  value={pipelineSelecionado || ''}
+                  onChange={e => {
+                    const id = parseInt(e.target.value);
+                    setPipelineSelecionado(id || null);
+                    setMappingTemp({});
+                  }}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-alisson-500 focus:border-alisson-500"
+                >
+                  <option value="">-- Selecione --</option>
+                  {pipelines.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} (ID: {p.id})</option>
+                  ))}
+                </select>
+
+                {pipelineSelecionado && (
+                  <button
+                    onClick={autoMapear}
+                    className="flex items-center gap-2 text-sm bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    <Wand2 size={16} />
+                    Auto-mapear estagios
+                  </button>
+                )}
+
+                {config.pipeline_id && (
+                  <div className="mt-2 text-xs text-gray-500 flex items-center gap-1">
+                    <CheckCircle size={12} className="text-green-500" />
+                    Pipeline ativo: <strong>{pipelines.find(p => p.id === config.pipeline_id)?.name || config.pipeline_id}</strong>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Mapeamento de Estagios */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+              <ArrowRight size={20} className="text-alisson-500" />
+              Mapeamento de Estagios
+            </h3>
+
+            {!pipelineSelecionado ? (
+              <div className="text-center py-8 text-gray-400">
+                <p className="text-sm">Selecione um pipeline primeiro</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-500 mb-3">
+                  Associe cada classificacao BANT a um estagio do funil
+                </p>
+                {classificacoes.map(cls => {
+                  const cores = CLASSIFICACAO_CORES[cls];
+                  return (
+                    <div key={cls} className="flex items-center gap-3">
+                      <div className={`flex items-center gap-1.5 w-32 px-3 py-2 rounded-lg border ${cores.bg}`}>
+                        {cores.icon}
+                        <span className={`text-xs font-semibold ${cores.text}`}>{cls}</span>
+                      </div>
+                      <ArrowRight size={14} className="text-gray-300 flex-shrink-0" />
+                      <select
+                        value={mappingTemp[cls] || ''}
+                        onChange={e => setMappingTemp({ ...mappingTemp, [cls]: parseInt(e.target.value) || 0 })}
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-alisson-500 focus:border-alisson-500"
+                      >
+                        <option value="">-- Nenhum --</option>
+                        {pipelineAtual?.statuses.map(s => (
+                          <option key={s.id} value={s.id}>{s.name} (ID: {s.id})</option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })}
+
+                <div className="pt-3 border-t border-gray-100 flex gap-2">
+                  <button
+                    onClick={salvarConfig}
+                    disabled={salvando}
+                    className="flex-1 flex items-center justify-center gap-2 bg-alisson-500 hover:bg-alisson-600 text-white py-2.5 px-4 rounded-lg text-sm font-medium disabled:opacity-50 transition-colors"
+                  >
+                    {salvando ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+                    {salvando ? 'Salvando...' : 'Salvar Configuracao'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Lista de Leads Qualificados */
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <List size={20} className="text-alisson-500" />
+              Leads Qualificados
+            </h3>
+            <div className="flex gap-1">
+              <button
+                onClick={() => handleFiltroClass('')}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  !filtroClass ? 'bg-alisson-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                Todos
+              </button>
+              {classificacoes.map(cls => {
+                const cores = CLASSIFICACAO_CORES[cls];
+                return (
+                  <button
+                    key={cls}
+                    onClick={() => handleFiltroClass(cls)}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors flex items-center gap-1 ${
+                      filtroClass === cls ? 'bg-alisson-500 text-white' : `${cores.bg} ${cores.text} hover:opacity-80`
+                    }`}
+                  >
+                    {cores.icon}
+                    {cls}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {leads.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Target size={40} className="mx-auto mb-2 opacity-30" />
+              <p>Nenhum lead qualificado ainda</p>
+              <p className="text-xs mt-1">Os leads serao qualificados automaticamente durante as conversas</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Telefone</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Nota</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Class.</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Necessidade</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Orcamento</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Prazo</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Decisor</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Lead ID</th>
+                    <th className="text-left py-2 px-2 text-gray-500 font-medium">Atualizado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {leads.map(lead => {
+                    const cores = CLASSIFICACAO_CORES[lead.classificacao] || CLASSIFICACAO_CORES.FRIO;
+                    const scoreColor = lead.lead_score >= 80 ? 'text-green-600' : lead.lead_score >= 55 ? 'text-yellow-600' : 'text-red-500';
+                    return (
+                      <tr key={lead.id} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2.5 px-2 font-mono text-xs text-gray-700">
+                          {lead.telefone ? `...${lead.telefone.slice(-4)}` : '-'}
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <span className={`font-bold ${scoreColor}`}>{lead.lead_score}</span>
+                          <span className="text-gray-400 text-xs">/150</span>
+                        </td>
+                        <td className="py-2.5 px-2">
+                          <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cores.bg} ${cores.text}`}>
+                            {cores.icon}
+                            {lead.classificacao}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-gray-600 max-w-[120px] truncate" title={lead.bant_need || ''}>
+                          {lead.bant_need || <span className="text-gray-300">-</span>}
+                          {lead.bant_need_score > 0 && <span className="text-alisson-500 ml-1">({lead.bant_need_score})</span>}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-gray-600">
+                          {lead.bant_budget || <span className="text-gray-300">-</span>}
+                          {lead.bant_budget_score > 0 && <span className="text-alisson-500 ml-1">({lead.bant_budget_score})</span>}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-gray-600">
+                          {lead.bant_timeline || <span className="text-gray-300">-</span>}
+                          {lead.bant_timeline_score > 0 && <span className="text-alisson-500 ml-1">({lead.bant_timeline_score})</span>}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-gray-600">
+                          {lead.bant_authority || <span className="text-gray-300">-</span>}
+                          {lead.bant_authority_score > 0 && <span className="text-alisson-500 ml-1">({lead.bant_authority_score})</span>}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs">
+                          {lead.kommo_lead_id ? (
+                            <span className="text-green-600 font-medium">#{lead.kommo_lead_id}</span>
+                          ) : (
+                            <span className="text-gray-300">-</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-2 text-xs text-gray-400 whitespace-nowrap">
+                          {lead.atualizado_em ? new Date(lead.atualizado_em).toLocaleString('pt-BR') : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- Simulador do Agente ---
+function SimuladorAgente() {
   const { token } = useAuth();
   const [historico, setHistorico] = useState<Mensagem[]>([]);
   const [bant, setBant] = useState<Bant>({});
@@ -580,7 +1036,7 @@ function SimuladorDara() {
               <Bot size={20} />
             </div>
             <div>
-              <p className="font-semibold text-sm">Dara — Alisson Joias</p>
+              <p className="font-semibold text-sm">Agente SDR — Alisson Joias</p>
               <p className={`text-xs ${promptChars === 0 ? 'text-red-300' : 'text-alisson-200'}`}>
                 {promptChars === null ? 'Modo Simulacao' : promptChars === 0 ? 'Prompt vazio — configure em Prompt Lab' : `Prompt ativo: ${promptChars} chars`}
               </p>
@@ -601,7 +1057,7 @@ function SimuladorDara() {
           {historico.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-center text-gray-400">
               <Bot size={44} className="mb-3 opacity-25" />
-              <p className="font-medium text-gray-500">Simule uma conversa com a Dara</p>
+              <p className="font-medium text-gray-500">Simule uma conversa com o agente</p>
               <p className="text-sm mt-1">Digite como se fosse um lead chegando pelo WhatsApp</p>
               <p className="text-xs mt-3">ou use um dos atalhos abaixo</p>
             </div>
@@ -650,7 +1106,7 @@ function SimuladorDara() {
           {transferirHumano && (
             <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 text-sm text-orange-700 flex items-center gap-2">
               <Zap size={16} />
-              <span>Dara solicitou transferencia para atendente humano</span>
+              <span>Agente solicitou transferencia para atendente humano</span>
             </div>
           )}
         </div>
@@ -695,7 +1151,7 @@ function SimuladorDara() {
       <div className="w-64 flex flex-col gap-3">
         {/* Score */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Lead Score</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pontuacao</p>
           <div className="flex items-end gap-2 mb-2">
             <span className={`text-4xl font-bold ${scoreColor}`}>{leadScore}</span>
             <span className="text-gray-400 text-sm mb-1">/100</span>

@@ -11,7 +11,7 @@
 ## Passo 1: Criar Projeto
 
 1. No painel do Easypanel, clique em **Create Project**
-2. Nome: `whatsalisson` (ou o nome que preferir)
+2. Nome: `ialisson` (ou o nome que preferir)
 
 ---
 

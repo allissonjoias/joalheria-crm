@@ -30,10 +30,10 @@ export function ConversaList({
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {/* Header estilo WhatsApp */}
+      {/* Header */}
       <div className="bg-alisson-600 px-4 py-3">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-bold text-creme-100 text-lg">WhatsAlisson</h2>
+          <h2 className="font-bold text-creme-100 text-lg">IAlisson</h2>
           <img src="/leao-branco.svg" alt="" className="w-7 h-7 opacity-70" />
         </div>
 
@@ -55,7 +55,7 @@ export function ConversaList({
         <FiltroCanal filtroAtual={filtroCanal} onFiltrar={onFiltrar} />
       </div>
 
-      {/* Lista de conversas */}
+      {/* Lista */}
       <div className="flex-1 overflow-y-auto">
         {conversasFiltradas.map((c) => (
           <ConversaItem

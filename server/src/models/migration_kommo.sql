@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS kommo_config (
   token_expires_at TEXT,
   redirect_uri TEXT DEFAULT 'https://localhost/kommo/callback',
   ativo INTEGER NOT NULL DEFAULT 1,
-  criado_em TEXT DEFAULT (datetime('now')),
-  atualizado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+  atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 -- Log de progresso das importacoes
@@ -28,16 +28,16 @@ CREATE TABLE IF NOT EXISTS kommo_import_log (
   detalhes TEXT,
   iniciado_em TEXT,
   finalizado_em TEXT,
-  criado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
--- Mapeamento Kommo ID <-> WhatsAlisson ID (evita duplicatas)
+-- Mapeamento Kommo ID <-> IAlisson ID (evita duplicatas)
 CREATE TABLE IF NOT EXISTS kommo_mapeamento (
   id TEXT PRIMARY KEY,
   tipo TEXT NOT NULL CHECK (tipo IN ('contato','lead','conversa','nota')),
   kommo_id INTEGER NOT NULL,
   local_id TEXT NOT NULL,
-  criado_em TEXT DEFAULT (datetime('now'))
+  criado_em TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_kommo_map ON kommo_mapeamento(tipo, kommo_id);

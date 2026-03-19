@@ -147,7 +147,7 @@ export class MetaService {
     // Update token in database
     const db = getDb();
     db.prepare(
-      "UPDATE meta_config SET access_token = ?, atualizado_em = datetime('now') WHERE id = ?"
+      "UPDATE meta_config SET access_token = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
     ).run(newToken, config.id);
 
     return newToken;
