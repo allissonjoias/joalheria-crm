@@ -35,6 +35,9 @@ RUN npm ci --workspace=server --omit=dev
 # Copiar build do server (inclui dist/models/*.sql)
 COPY --from=builder /app/server/dist ./server/dist
 
+# Copiar paginas publicas (privacidade, termos, exclusao - exigidas pela Meta)
+COPY --from=builder /app/server/public ./server/public
+
 # Copiar build do client
 COPY --from=builder /app/client/dist ./client/dist
 
