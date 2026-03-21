@@ -329,12 +329,37 @@ export class InstagramService {
         return { ok: false, erro: err.error?.message || 'Token inválido' };
       }
 
-      // Se nao tem ig_user_id, testar com page_id
-      const url = `${GRAPH_API}/${conta.page_id}?fields=id,name&access_token=${conta.access_token}`;
-      const res = await fetch(url);
-      if (res.ok) return { ok: true, username: conta.page_name || undefined };
-      const err = await res.json() as any;
-      return { ok: false, erro: err.error?.message || 'Token inválido' };
+      // Se nao tem ig_user_id, tentar buscar via page_id
+      if (conta.page_id) {
+        const pageUrl = `${GRAPH_API}/${conta.page_id}?fields=id,name,instagram_business_account&access_token=${conta.access_token}`;
+        const pageRes = await fetch(pageUrl);
+        if (pageRes.ok) {
+          const pageData = await pageRes.json() as any;
+          if (pageData.instagram_business_account?.id) {
+            const igUserId = pageData.instagram_business_account.id;
+            // Buscar username
+            const igUrl = `${GRAPH_API}/${igUserId}?fields=id,username,name,profile_picture_url&access_token=${conta.access_token}`;
+            const igRes = await fetch(igUrl);
+            let igUsername: string | null = null;
+            if (igRes.ok) {
+              const igData = await igRes.json() as any;
+              igUsername = igData.username || null;
+            }
+            // Atualizar no banco
+            const db = getDb();
+            db.prepare(
+              "UPDATE instagram_contas SET ig_user_id = ?, username = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
+            ).run(igUserId, igUsername, id);
+            console.log(`[INSTAGRAM] ig_user_id encontrado e salvo: ${igUserId} (@${igUsername})`);
+            return { ok: true, username: igUsername || pageData.name };
+          }
+          return { ok: true, username: pageData.name || conta.page_name || undefined };
+        }
+        const err = await pageRes.json() as any;
+        return { ok: false, erro: err.error?.message || 'Token inválido' };
+      }
+
+      return { ok: false, erro: 'Sem ig_user_id ou page_id' };
     } catch (e: any) {
       return { ok: false, erro: e.message };
     }
