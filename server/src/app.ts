@@ -76,6 +76,10 @@ app.post('/api/whatsapp/webhook/receive', (req, res) => whatsappCtrl.receberWebh
 // Instagram OAuth callback (publico - redirect do Facebook)
 app.use('/api/instagram', instagramRoutes);
 
+// Rota alternativa de callback OAuth Instagram (para compatibilidade com Meta)
+const instagramController = new (require('./controllers/instagram.controller').InstagramController)();
+app.get('/api/auth/callback/instagram', (req: any, res: any) => instagramController.callback(req, res));
+
 // Protected routes
 app.use('/api/clientes', authMiddleware, clientesRoutes);
 app.use('/api/produtos', authMiddleware, produtosRoutes);

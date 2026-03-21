@@ -13,7 +13,7 @@ export class InstagramController {
 
     const protocol = String(req.headers['x-forwarded-proto'] || req.protocol);
     const host = String(req.headers['x-forwarded-host'] || req.get('host'));
-    const redirectUri = `${protocol}://${host}/api/instagram/callback`;
+    const redirectUri = `${protocol}://${host}/api/auth/callback/instagram`;
 
     const url = instagramService.getAuthUrl(redirectUri);
     res.json({ url, redirect_uri: redirectUri });
@@ -37,7 +37,7 @@ export class InstagramController {
     try {
       const protocol = String(req.headers['x-forwarded-proto'] || req.protocol);
       const host = String(req.headers['x-forwarded-host'] || req.get('host'));
-      const redirectUri = `${protocol}://${host}/api/instagram/callback`;
+      const redirectUri = `${protocol}://${host}/api/auth/callback/instagram`;
 
       // 1. Trocar code por short-lived token
       const shortToken = await instagramService.trocarCodePorToken(code, redirectUri);
