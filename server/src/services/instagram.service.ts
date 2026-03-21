@@ -124,6 +124,29 @@ export class InstagramService {
     return contas;
   }
 
+  // Inscreve a página para receber webhooks do app
+  async inscreverPaginaWebhook(pageId: string, pageAccessToken: string): Promise<void> {
+    try {
+      const url = `${GRAPH_API}/${pageId}/subscribed_apps`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_token: pageAccessToken,
+          subscribed_fields: ['messages', 'messaging_postbacks', 'messaging_optins', 'message_deliveries', 'message_reads', 'feed'],
+        }),
+      });
+      const data = await res.json() as any;
+      if (data.success) {
+        console.log(`[INSTAGRAM] Página ${pageId} inscrita para webhooks com sucesso`);
+      } else {
+        console.error(`[INSTAGRAM] Erro ao inscrever página ${pageId}:`, data);
+      }
+    } catch (e: any) {
+      console.error(`[INSTAGRAM] Erro ao inscrever página ${pageId}:`, e.message);
+    }
+  }
+
   // Salva uma conta Instagram no banco
   salvarConta(conta: {
     page_id: string;

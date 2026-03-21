@@ -53,10 +53,12 @@ export class InstagramController {
         return res.redirect(`${frontUrl}/configuracoes?instagram_erro=${encodeURIComponent('Nenhuma página do Facebook encontrada. Verifique se sua conta tem páginas vinculadas.')}`);
       }
 
-      // 4. Salvar todas as contas encontradas
+      // 4. Salvar todas as contas encontradas e inscrever páginas para webhooks
       let contasSalvas = 0;
       for (const conta of contas) {
         instagramService.salvarConta({ ...conta, expires_in });
+        // Inscrever a página para receber webhooks (DMs, mensagens, etc.)
+        await instagramService.inscreverPaginaWebhook(conta.page_id, conta.page_access_token);
         contasSalvas++;
       }
 
@@ -85,6 +87,11 @@ export class InstagramController {
     try {
       const id = req.params.id as string;
       const result = await instagramService.testarConta(id);
+      // Também inscrever a página para webhooks ao testar
+      const conta = instagramService.obterConta(id);
+      if (conta?.page_id && conta?.access_token) {
+        await instagramService.inscreverPaginaWebhook(conta.page_id, conta.access_token);
+      }
       res.json(result);
     } catch (e: any) {
       res.status(500).json({ erro: e.message });
