@@ -1,9 +1,12 @@
 import { Request, Response } from 'express';
 import { getDb, saveDb } from '../config/database';
-import { ClaudeService, MensagemChat } from '../services/claude.service';
+import { ClaudeService, MensagemChat, MensagemMultimodal, ContentBlock } from '../services/claude.service';
+import { agoraLocal } from '../utils/timezone';
 import fs from 'fs';
 import path from 'path';
-import { transcreverAudio } from '../services/media.service';
+import { transcreverAudio, extrairFrameVideo } from '../services/media.service';
+import { skillService, getDefaultSkills } from '../services/skill.service';
+import { skillLearningService } from '../services/skill-learning.service';
 
 const claude = new ClaudeService();
 
@@ -35,7 +38,7 @@ export class AgentesIaController {
       if (!nome || !area) return res.status(400).json({ erro: 'Nome e area sao obrigatorios' });
 
       const db = getDb();
-      const agora = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const agora = agoraLocal();
       db.prepare(
         'INSERT INTO agentes_ia (nome, area, prompt_sistema, foto_url, ativo, criado_em, atualizado_em) VALUES (?, ?, ?, ?, 1, ?, ?)'
       ).run(nome, area, prompt_sistema || '', foto_url || null, agora, agora);
@@ -49,22 +52,24 @@ export class AgentesIaController {
 
   atualizar(req: Request, res: Response) {
     try {
-      const { nome, area, prompt_sistema, foto_url, ativo } = req.body;
+      const { nome, area, prompt_sistema, foto_url, ativo, max_tokens, temperatura } = req.body;
       const id = Number(req.params.id);
       const db = getDb();
 
       const existente = db.prepare('SELECT * FROM agentes_ia WHERE id = ?').get(id) as any;
       if (!existente) return res.status(404).json({ erro: 'Agente nao encontrado' });
 
-      const agora = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const agora = agoraLocal();
       db.prepare(
-        `UPDATE agentes_ia SET nome = ?, area = ?, prompt_sistema = ?, foto_url = ?, ativo = ?, atualizado_em = ? WHERE id = ?`
+        `UPDATE agentes_ia SET nome = ?, area = ?, prompt_sistema = ?, foto_url = ?, ativo = ?, max_tokens = ?, temperatura = ?, atualizado_em = ? WHERE id = ?`
       ).run(
         nome !== undefined ? nome : existente.nome,
         area !== undefined ? area : existente.area,
         prompt_sistema !== undefined ? prompt_sistema : existente.prompt_sistema,
         foto_url !== undefined ? foto_url : existente.foto_url,
         ativo !== undefined ? ativo : existente.ativo,
+        max_tokens !== undefined ? max_tokens : (existente.max_tokens ?? 500),
+        temperatura !== undefined ? temperatura : (existente.temperatura ?? 0.7),
         agora,
         id
       );
@@ -114,7 +119,7 @@ export class AgentesIaController {
       fs.writeFileSync(filepath, Buffer.from(data, 'base64'));
 
       const fotoUrl = `/uploads/agentes/${filename}`;
-      const agora = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const agora = agoraLocal();
       db.prepare('UPDATE agentes_ia SET foto_url = ?, atualizado_em = ? WHERE id = ?').run(fotoUrl, agora, id);
       saveDb();
 
@@ -176,19 +181,114 @@ REGRAS IMPORTANTES:
 
       const systemPrompt = promptBase + instrucoesMidia;
 
-      const mensagensIA: MensagemChat[] = mensagens.slice(-10).map((m: any) => ({
-        role: m.role === 'user' || m.role === 'lead' ? 'user' as const : 'assistant' as const,
-        content: m.content || m.conteudo || '',
-      }));
+      const mensagensSlice = mensagens.slice(-10);
 
-      const resposta = await claude.simularDara(systemPrompt, mensagensIA, 1000);
+      // Verificar se há imagens ou vídeos para usar Vision
+      const temImagem = mensagensSlice.some((m: any) => (m.tipo_midia === 'imagem' || m.tipo_midia === 'video') && m.midia_url);
+
+      let resposta: string;
+      if (temImagem) {
+        // Montar mensagens multimodais com imagens reais
+        const UPLOADS_DIR = path.resolve(__dirname, '../../../uploads');
+        const mensagensVision: MensagemMultimodal[] = await Promise.all(mensagensSlice.map(async (m: any) => {
+          const role = (m.role === 'user' || m.role === 'lead' ? 'user' : 'assistant') as 'user' | 'assistant';
+          const content = m.content || m.conteudo || '';
+
+          if (role === 'user' && (m.tipo_midia === 'imagem' || m.tipo_midia === 'video') && m.midia_url) {
+            try {
+              const fileName = m.midia_url.replace('/uploads/', '');
+              const filePath = path.join(UPLOADS_DIR, fileName);
+              if (fs.existsSync(filePath)) {
+                let buffer: Buffer | null = null;
+                let mediaType = 'image/jpeg';
+
+                if (m.tipo_midia === 'imagem') {
+                  buffer = fs.readFileSync(filePath);
+                  const ext = path.extname(fileName).toLowerCase();
+                  mediaType = ext === '.png' ? 'image/png'
+                    : ext === '.webp' ? 'image/webp'
+                    : ext === '.gif' ? 'image/gif'
+                    : 'image/jpeg';
+                } else if (m.tipo_midia === 'video') {
+                  buffer = await extrairFrameVideo(filePath);
+                }
+
+                if (buffer && buffer.length <= 2 * 1024 * 1024) {
+                  const prompt = m.tipo_midia === 'video'
+                    ? 'O cliente enviou este vídeo. Esta é uma captura do vídeo. Descreva o que vê e responda de forma relevante como consultora de joalheria.'
+                    : 'O cliente enviou esta imagem. Descreva o que vê e responda de forma relevante como consultora de joalheria.';
+                  const blocks: ContentBlock[] = [
+                    { type: 'image', source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') } },
+                    { type: 'text', text: content || prompt },
+                  ];
+                  return { role, content: blocks };
+                }
+              }
+            } catch (e) {
+              console.warn('[Simulador] Erro ao processar midia para Vision:', e);
+            }
+          }
+          return { role, content };
+        }));
+        resposta = await claude.enviarMensagemComVisao(systemPrompt, mensagensVision, 2048);
+      } else {
+        const mensagensIA: MensagemChat[] = mensagensSlice.map((m: any) => ({
+          role: m.role === 'user' || m.role === 'lead' ? 'user' as const : 'assistant' as const,
+          content: m.content || m.conteudo || '',
+        }));
+        resposta = await claude.simularDara(systemPrompt, mensagensIA, 2048);
+      }
 
       // Tentar parsear como JSON (caso o prompt peça resposta em JSON)
       let respostaLimpa = resposta.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
       let parsed: any = null;
+
+      // Tentativa 1: parse direto
       try {
         parsed = JSON.parse(respostaLimpa);
-      } catch { /* nao era JSON */ }
+      } catch {
+        // Tentativa 2: encontrar primeiro bloco JSON válido
+        try {
+          const jsonMatch = respostaLimpa.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+          }
+        } catch {
+          // Tentativa 3: extrair campos individualmente via regex
+          const respostaMatch = respostaLimpa.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          const estadoMatch = respostaLimpa.match(/"estado_novo"\s*:\s*"([^"]*)"/);
+          const nomeMatch = respostaLimpa.match(/"nome_lead"\s*:\s*"([^"]*)"/);
+          const classificacaoMatch = respostaLimpa.match(/"classificacao"\s*:\s*"([^"]*)"/);
+          if (respostaMatch) {
+            parsed = {
+              resposta: respostaMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n'),
+              estado_novo: estadoMatch?.[1] || null,
+              nome_lead: nomeMatch?.[1] || null,
+              classificacao: classificacaoMatch?.[1] || null,
+            };
+            // Tentar extrair campos_bant
+            const produtoMatch = respostaLimpa.match(/"produto"\s*:\s*"([^"]*)"/);
+            const ocasiaoMatch = respostaLimpa.match(/"ocasiao"\s*:\s*"([^"]*)"/);
+            const prazoMatch = respostaLimpa.match(/"prazo"\s*:\s*"([^"]*)"/);
+            const orcamentoMatch = respostaLimpa.match(/"orcamento"\s*:\s*"([^"]*)"/);
+            const decisorMatch = respostaLimpa.match(/"decisor"\s*:\s*"([^"]*)"/);
+            if (produtoMatch || ocasiaoMatch || prazoMatch || orcamentoMatch || decisorMatch) {
+              parsed.campos_bant = {
+                produto: produtoMatch?.[1] || '',
+                ocasiao: ocasiaoMatch?.[1] || '',
+                prazo: prazoMatch?.[1] || '',
+                orcamento: orcamentoMatch?.[1] || '',
+                decisor: decisorMatch?.[1] || '',
+              };
+            }
+            // Tentar extrair pontuacao
+            const totalMatch = respostaLimpa.match(/"total"\s*:\s*(\d+)/);
+            if (totalMatch) {
+              parsed.pontuacao = { total: parseInt(totalMatch[1]) };
+            }
+          }
+        }
+      }
 
       res.json({
         resposta: parsed?.resposta || respostaLimpa,
@@ -397,12 +497,150 @@ Retorne o JSON com a analise e o prompt melhorado.`;
         return res.status(400).json({ erro: 'prompt_melhorado (string) obrigatorio' });
       }
 
-      const agora = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const agora = agoraLocal();
       db.prepare('UPDATE agentes_ia SET prompt_sistema = ?, atualizado_em = ? WHERE id = ?')
         .run(prompt_melhorado.trim(), agora, id);
       saveDb();
 
       res.json({ ok: true, prompt_aplicado: prompt_melhorado.trim() });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  // ===== SKILLS =====
+
+  listarSkills(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      const skills = skillService.getSkills(agentId);
+      res.json(skills);
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  criarSkill(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      const id = skillService.criar(agentId, req.body);
+      res.json({ id });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  atualizarSkill(req: Request, res: Response) {
+    try {
+      const skillId = Number(req.params.skillId);
+      skillService.atualizar(skillId, req.body);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  excluirSkill(req: Request, res: Response) {
+    try {
+      const skillId = Number(req.params.skillId);
+      skillService.excluir(skillId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  reordenarSkills(req: Request, res: Response) {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids)) return res.status(400).json({ erro: 'ids deve ser array' });
+      skillService.reordenar(ids);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  seedSkills(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      skillService.seedSkillsPadrao(agentId);
+      const skills = skillService.getSkills(agentId);
+      res.json({ ok: true, total: skills.length, skills });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  previewPrompt(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      const prompt = skillService.montarPrompt(agentId);
+      res.json({ prompt: prompt || '(nenhuma skill ativa)' });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  getSkillTemplates(_req: Request, res: Response) {
+    res.json(getDefaultSkills());
+  }
+
+  // ===== APRENDIZADO =====
+
+  listarSugestoes(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      const sugestoes = skillLearningService.listarSugestoes(agentId);
+      res.json(sugestoes);
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  aprovarSugestao(req: Request, res: Response) {
+    try {
+      const learningId = Number(req.params.learningId);
+      const { conteudo_editado } = req.body;
+      let skillId: number;
+      if (conteudo_editado) {
+        skillId = skillLearningService.aprovarComEdicao(learningId, conteudo_editado);
+      } else {
+        skillId = skillLearningService.aprovarSugestao(learningId);
+      }
+      res.json({ ok: true, skill_id: skillId });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  rejeitarSugestao(req: Request, res: Response) {
+    try {
+      const learningId = Number(req.params.learningId);
+      skillLearningService.rejeitarSugestao(learningId);
+      res.json({ ok: true });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  // ===== RELATORIOS =====
+
+  listarRelatorios(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      const relatorios = skillLearningService.listarRelatorios(agentId);
+      res.json(relatorios);
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
+  async gerarRelatorio(req: Request, res: Response) {
+    try {
+      const agentId = Number(req.params.id);
+      const relatorio = await skillLearningService.gerarRelatorioDiario(agentId);
+      res.json(relatorio);
     } catch (e: any) {
       res.status(500).json({ erro: e.message });
     }

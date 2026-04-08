@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { HelpCircle, X, Send, Loader2, Trash2 } from 'lucide-react';
 import api from '../../services/api';
 
@@ -8,6 +9,12 @@ interface Mensagem {
 }
 
 export function AjudaCrmWidget() {
+  const location = useLocation();
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const isFullBleedPage = ['/mensagens', '/pipeline'].includes(location.pathname);
+
+  // Esconder no mobile em paginas fullbleed (mensagens, pipeline)
+  if (isMobile && isFullBleedPage) return null;
   const [aberto, setAberto] = useState(false);
   const [input, setInput] = useState('');
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
@@ -55,7 +62,7 @@ export function AjudaCrmWidget() {
       {!aberto && (
         <button
           onClick={() => setAberto(true)}
-          className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
+          className="fixed bottom-6 right-4 md:right-6 z-40 w-12 h-12 md:w-14 md:h-14 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
           title="Precisa de ajuda?"
         >
           <HelpCircle size={28} />
@@ -64,7 +71,7 @@ export function AjudaCrmWidget() {
 
       {/* Janela de chat */}
       {aberto && (
-        <div className="fixed bottom-6 right-6 z-50 w-96 h-[520px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
+        <div className="fixed bottom-6 right-2 md:right-6 z-50 w-[calc(100vw-16px)] md:w-96 h-[70vh] md:h-[520px] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
           {/* Header */}
           <div className="bg-alisson-600 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-2">

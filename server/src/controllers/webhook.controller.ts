@@ -254,16 +254,44 @@ export class WebhookController {
         }
       } else if (object === 'instagram') {
         // Identificar qual conta Instagram recebeu o evento
+        // entry.id pode ser ig_user_id OU page_id, e também verificar pelo recipient das DMs
         const entryId = body.entry?.[0]?.id;
-        const conta = entryId ? instagramService.obterContaPorPageId(entryId) || instagramService.obterContaPorIgUserId(entryId) : null;
+        const recipientId = body.entry?.[0]?.messaging?.[0]?.recipient?.id;
+        const conta = entryId
+          ? (instagramService.obterContaPorIgUserId(entryId)
+            || instagramService.obterContaPorPageId(entryId)
+            || (recipientId ? instagramService.obterContaPorIgUserId(recipientId) || instagramService.obterContaPorPageId(recipientId) : null))
+          : null;
+
+        // Filtrar eventos sem conteudo util (message_edit, is_echo) antes de logar
+        const messaging = body.entry?.[0]?.messaging || [];
+        const changes = body.entry?.[0]?.changes || [];
+        const temConteudoUtil = changes.length > 0 || messaging.length === 0 || messaging.some((m: any) =>
+          (m.message && !m.message.is_echo) || m.postback
+        );
+
+        // Nao logar webhooks que so tem message_edit ou is_echo
+        if (!temConteudoUtil) {
+          return;
+        }
 
         // Log webhook
+        const logId = uuidv4();
         db.prepare(
           'INSERT INTO webhook_log (id, plataforma, payload) VALUES (?, ?, ?)'
-        ).run(uuidv4(), 'instagram', JSON.stringify(body));
+        ).run(logId, 'instagram', JSON.stringify(body));
+
+        // Ignorar webhooks de contas não reconhecidas (evita duplicação por IGSID)
+        if (!conta) {
+          console.log(`[INSTAGRAM] Webhook ignorado - conta não reconhecida (entry.id: ${entryId})`);
+          db.prepare(
+            "UPDATE webhook_log SET processado = 1 WHERE id = ?"
+          ).run(logId);
+          return;
+        }
 
         // Obter config de eventos da conta
-        const igConfig = conta ? instagramService.obterConfigEventos(conta.id) : { receber_dm: 1, receber_comentarios: 1, receber_mencoes: 1 };
+        const igConfig = instagramService.obterConfigEventos(conta.id);
 
         const events = webhookService.parseInstagramPayload(body);
         for (const event of events) {
@@ -282,8 +310,16 @@ export class WebhookController {
             }
           } catch (e: any) {
             console.error('Erro processando evento Instagram:', e);
+            db.prepare(
+              "UPDATE webhook_log SET erro = ? WHERE id = ?"
+            ).run(e.message, logId);
           }
         }
+
+        // Marcar como processado
+        db.prepare(
+          "UPDATE webhook_log SET processado = 1 WHERE id = ?"
+        ).run(logId);
       }
     } catch (e) {
       console.error('Erro geral ao processar webhook:', e);

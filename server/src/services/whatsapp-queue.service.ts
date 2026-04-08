@@ -1,10 +1,33 @@
 import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
 import { getDb, saveDb } from '../config/database';
 import { EvolutionService, resolveLid } from './evolution.service';
 import { ClaudeService, MensagemChat } from './claude.service';
 import { ExtracaoService } from './extracao.service';
+import { hojeLocal, agoraLocal } from '../utils/timezone';
 import { SdrQualifierService } from './sdr-qualifier.service';
 import { detectarTipoMidia, baixarMidiaBaileys, transcreverAudio } from './media.service';
+
+const AVATARS_DIR = path.resolve(__dirname, '../../../uploads/avatars');
+if (!fs.existsSync(AVATARS_DIR)) fs.mkdirSync(AVATARS_DIR, { recursive: true });
+
+function downloadAvatar(url: string, clienteId: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const filename = `avatar_${clienteId}.jpg`;
+    const dest = path.join(AVATARS_DIR, filename);
+    const client = url.startsWith('https') ? https : http;
+    const file = fs.createWriteStream(dest);
+    client.get(url, (response) => {
+      if (response.statusCode !== 200) { file.close(); try { fs.unlinkSync(dest); } catch {} resolve(null); return; }
+      response.pipe(file);
+      file.on('finish', () => { file.close(); resolve(`/uploads/avatars/${filename}`); });
+      file.on('error', () => { file.close(); try { fs.unlinkSync(dest); } catch {} resolve(null); });
+    }).on('error', () => { file.close(); try { fs.unlinkSync(dest); } catch {} resolve(null); });
+  });
+}
 
 const evolutionService = new EvolutionService();
 const claudeService = new ClaudeService();
@@ -81,7 +104,7 @@ function dentroHorarioComercial(): boolean {
 }
 
 function hoje(): string {
-  return new Date().toISOString().split('T')[0];
+  return hojeLocal();
 }
 
 interface Campanha {
@@ -372,6 +395,8 @@ export class WhatsAppQueueService {
           || msg.message?.extendedTextMessage?.text
           || msg.message?.imageMessage?.caption
           || msg.message?.videoMessage?.caption
+          || msg.message?.documentMessage?.caption
+          || msg.message?.documentWithCaptionMessage?.message?.documentMessage?.caption
           || '';
         const fromMe = msg.key?.fromMe || false;
         // pushName em mensagens fromMe é o nome da dona do WhatsApp, nao do cliente
@@ -431,21 +456,27 @@ export class WhatsAppQueueService {
       cliente = { id: clienteId, nome };
       console.log(`[WhatsApp] Novo cliente criado: ${nome} (+${telefone})`);
 
-      // Buscar foto de perfil do WhatsApp (async, nao bloqueia)
-      evolutionService.buscarFotoPerfil(telefone).then(url => {
+      // Buscar foto de perfil do WhatsApp e salvar localmente
+      evolutionService.buscarFotoPerfil(telefone).then(async (url) => {
         if (url) {
-          db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(url, clienteId);
-          saveDb();
+          const localPath = await downloadAvatar(url, clienteId);
+          if (localPath) {
+            db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(localPath, clienteId);
+            saveDb();
+          }
         }
       }).catch(() => {});
     } else if (!fromMe) {
-      // Atualizar foto se ainda nao tem
+      // Atualizar foto se ainda nao tem ou se e URL externa
       const clienteInfo = db.prepare('SELECT foto_perfil FROM clientes WHERE id = ?').get(cliente.id) as any;
-      if (!clienteInfo?.foto_perfil) {
-        evolutionService.buscarFotoPerfil(telefone).then(url => {
+      if (!clienteInfo?.foto_perfil || clienteInfo.foto_perfil.includes('pps.whatsapp.net')) {
+        evolutionService.buscarFotoPerfil(telefone).then(async (url) => {
           if (url) {
-            db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(url, cliente.id);
-            saveDb();
+            const localPath = await downloadAvatar(url, cliente.id);
+            if (localPath) {
+              db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(localPath, cliente.id);
+              saveDb();
+            }
           }
         }).catch(() => {});
       }
@@ -479,9 +510,9 @@ export class WhatsAppQueueService {
     const papel = fromMe ? 'assistant' : 'user';
     const statusEnvio = fromMe ? 'enviado' : 'entregue';
     db.prepare(
-      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, tipo_midia, midia_url, transcricao)
-       VALUES (?, ?, ?, ?, 'whatsapp', ?, ?, ?, ?)`
-    ).run(uuidv4(), conversa.id, papel, texto, statusEnvio, tipoMidia, midiaUrl, transcricao);
+      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, tipo_midia, midia_url, transcricao, criado_em)
+       VALUES (?, ?, ?, ?, 'whatsapp', ?, ?, ?, ?, ?)`
+    ).run(uuidv4(), conversa.id, papel, texto, statusEnvio, tipoMidia, midiaUrl, transcricao, agoraLocal());
 
     // Atualizar timestamp sempre, mas nome do contato SOMENTE quando a mensagem veio do cliente (não fromMe)
     // pushName em mensagens fromMe é o nome da dona do WhatsApp, não do cliente
@@ -598,9 +629,9 @@ export class WhatsAppQueueService {
       // 3. Salvar resposta no CRM
       const msgId = uuidv4();
       db.prepare(
-        `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio)
-         VALUES (?, ?, 'assistant', ?, 'whatsapp', 'pendente')`
-      ).run(msgId, conversaId, resposta);
+        `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, criado_em)
+         VALUES (?, ?, 'assistant', ?, 'whatsapp', 'pendente', ?)`
+      ).run(msgId, conversaId, resposta, agoraLocal());
 
       db.prepare(
         "UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?"

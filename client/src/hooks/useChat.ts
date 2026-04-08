@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../services/api';
+import { agoraLocal } from '../utils/timezone';
 
 interface Mensagem {
   id: string;
@@ -69,7 +70,7 @@ export function useChat() {
       conversa_id: conversaId,
       papel: 'user',
       conteudo: texto,
-      criado_em: new Date().toISOString(),
+      criado_em: agoraLocal(),
     };
     setMensagens(prev => [...prev, tempMsg]);
 
@@ -85,7 +86,7 @@ export function useChat() {
         papel: 'assistant',
         conteudo: data.resposta,
         dados_extraidos: data.dados_extraidos ? JSON.stringify(data.dados_extraidos) : undefined,
-        criado_em: new Date().toISOString(),
+        criado_em: agoraLocal(),
       };
       setMensagens(prev => [...prev, assistantMsg]);
 

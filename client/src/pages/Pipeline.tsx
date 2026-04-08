@@ -47,6 +47,22 @@ interface Odv {
   campos_ia?: string; // JSON array de campos preenchidos pela IA
   venda_registrada?: number; // 1 se venda ja foi criada na tabela vendas
   data_venda?: string;
+  pagamento_status?: string;
+  pagamento_valor?: number;
+}
+
+interface BrechaItem {
+  id: string;
+  pipeline_id?: string;
+  cliente_id?: string;
+  tipo: string;
+  descricao: string;
+  acao_tomada: string;
+  cliente_nome?: string;
+  odv_titulo?: string;
+  estagio?: string;
+  valor?: number;
+  criado_em: string;
 }
 
 interface Tarefa {
@@ -128,6 +144,10 @@ export default function Pipeline() {
   // Stats tarefas
   const [tarefaStats, setTarefaStats] = useState({ total: 0, pendentes: 0, vencidas: 0, concluidas: 0, em_andamento: 0 });
 
+  // Brechas
+  const [brechas, setBrechas] = useState<BrechaItem[]>([]);
+  const [mostrarBrechas, setMostrarBrechas] = useState(false);
+
   useEffect(() => {
     api.get('/funil/motivos-perda').then(({ data }) => setMotivosPerda(data)).catch(() => {});
     api.get('/funil/origens-lead').then(({ data }) => setOrigensLead(data)).catch(() => {});
@@ -136,18 +156,20 @@ export default function Pipeline() {
 
   const carregar = async () => {
     try {
-      const [odvsRes, estagiosRes, clientesRes, tarefasRes, statsRes] = await Promise.all([
+      const [odvsRes, estagiosRes, clientesRes, tarefasRes, statsRes, brechasRes] = await Promise.all([
         api.get('/pipeline', { params: { funil_id: 1 } }),
         api.get('/funil/estagios', { params: { funil_id: 1 } }),
         api.get('/clientes'),
         api.get('/tarefas?limite=50'),
         api.get('/tarefas/estatisticas'),
+        api.get('/brechas').catch(() => ({ data: [] })),
       ]);
       setOdvs(odvsRes.data);
       setEstagios(estagiosRes.data);
       setClientes(clientesRes.data);
       setTarefas(tarefasRes.data);
       setTarefaStats(statsRes.data);
+      setBrechas(brechasRes.data);
     } catch (e) {
       console.error('Erro ao carregar pipeline:', e);
     }
@@ -309,11 +331,11 @@ export default function Pipeline() {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col p-6">
+    <div className="flex-1 min-h-0 flex flex-col p-3 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-800">Funil de Vendas</h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3 md:mb-4">
+        <div className="flex items-center gap-2 md:gap-4">
+          <h1 className="text-lg md:text-2xl font-bold text-gray-800">Funil</h1>
           {/* Toggle Kanban / Funil */}
           <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
             <button
@@ -339,25 +361,32 @@ export default function Pipeline() {
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
+          {brechas.length > 0 && (
+            <Tooltip texto="Ver brechas detectadas no funil - leads que precisam de atencao" posicao="bottom">
+              <Button variante="secundario" tamanho="sm" onClick={() => setMostrarBrechas(!mostrarBrechas)} className="border-orange-200 text-orange-600 hover:bg-orange-50">
+                <AlertTriangle size={14} /> <span className="hidden sm:inline">Brechas</span> ({brechas.length})
+              </Button>
+            </Tooltip>
+          )}
           <Tooltip texto="Abrir painel lateral com tarefas pendentes e vencidas" posicao="bottom">
-            <Button variante="secundario" onClick={() => setPainelTarefas(!painelTarefas)}>
-              <CheckSquare size={16} /> Tarefas ({tarefaStats.pendentes})
+            <Button variante="secundario" tamanho="sm" onClick={() => setPainelTarefas(!painelTarefas)}>
+              <CheckSquare size={14} /> <span className="hidden sm:inline">Tarefas</span> ({tarefaStats.pendentes})
             </Button>
           </Tooltip>
-          <Tooltip texto="Configurar estagios do funil: adicionar, remover ou reordenar" posicao="bottom">
-            <Button variante="secundario" onClick={() => setModalConfig(true)}>
-              <Settings size={16} /> Estagios
+          <Tooltip texto="Configurar estagios do funil" posicao="bottom">
+            <Button variante="secundario" tamanho="sm" onClick={() => setModalConfig(true)}>
+              <Settings size={14} />
             </Button>
           </Tooltip>
-          <Tooltip texto="Criar uma nova tarefa (follow-up, ligacao, reuniao) vinculada a uma ODV" posicao="bottom">
-            <Button onClick={() => setModalTarefa(true)}>
-              <Plus size={16} /> Tarefa
+          <Tooltip texto="Criar tarefa" posicao="bottom">
+            <Button tamanho="sm" onClick={() => setModalTarefa(true)}>
+              <Plus size={14} /> <span className="hidden sm:inline">Tarefa</span>
             </Button>
           </Tooltip>
-          <Tooltip texto="Criar nova Oportunidade de Venda (ODV) no funil" posicao="bottom">
-            <Button onClick={() => setModalOdv(true)}>
-              <Plus size={16} /> Nova ODV
+          <Tooltip texto="Nova ODV" posicao="bottom">
+            <Button tamanho="sm" onClick={() => setModalOdv(true)}>
+              <Plus size={14} /> <span className="hidden sm:inline">Nova</span> ODV
             </Button>
           </Tooltip>
         </div>
@@ -368,7 +397,7 @@ export default function Pipeline() {
         <div className="flex gap-4 flex-1 overflow-hidden">
           <div className="flex-1 overflow-x-auto">
             <DragDropContext onDragEnd={handleDragEnd}>
-              <div className="flex gap-3 h-full pb-4">
+              <div className="flex gap-3 h-full pb-4 snap-x snap-mandatory md:snap-none overflow-x-auto md:overflow-x-visible">
                 {estagios.map((estagio, idx) => {
                   const estagioOdvs = odvs.filter(d => d.estagio === estagio.nome);
                   const valorTotal = estagioOdvs.reduce((acc, d) => acc + (d.valor || 0), 0);
@@ -391,7 +420,7 @@ export default function Pipeline() {
                           <div className={`flex-1 w-px bg-${faseConfig.cor}-200 mt-1`} />
                         </div>
                       )}
-                      <div className="w-72 flex flex-col">
+                      <div className="w-[80vw] md:w-72 flex-shrink-0 snap-center flex flex-col">
                       <div className="mb-3">
                         <div className="flex items-center gap-2 mb-1">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: estagio.cor }} />
@@ -446,6 +475,37 @@ export default function Pipeline() {
                                         <div className="flex items-center gap-1 mt-1 px-2 py-0.5 bg-green-50 border border-green-200 rounded-md w-fit">
                                           <ShieldCheck size={11} className="text-green-600" />
                                           <span className="text-[10px] font-semibold text-green-700">Venda registrada</span>
+                                        </div>
+                                      )}
+                                      {odv.pagamento_status && (
+                                        <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md w-fit ${
+                                          odv.pagamento_status === 'approved' ? 'bg-emerald-50 border border-emerald-200' :
+                                          odv.pagamento_status === 'pending' ? 'bg-yellow-50 border border-yellow-200' :
+                                          'bg-red-50 border border-red-200'
+                                        }`}>
+                                          <CreditCard size={11} className={
+                                            odv.pagamento_status === 'approved' ? 'text-emerald-600' :
+                                            odv.pagamento_status === 'pending' ? 'text-yellow-600' :
+                                            'text-red-600'
+                                          } />
+                                          <span className={`text-[10px] font-semibold ${
+                                            odv.pagamento_status === 'approved' ? 'text-emerald-700' :
+                                            odv.pagamento_status === 'pending' ? 'text-yellow-700' :
+                                            'text-red-700'
+                                          }`}>
+                                            {odv.pagamento_status === 'approved' ? 'Pago' :
+                                             odv.pagamento_status === 'pending' ? 'Pgto pendente' :
+                                             'Pgto ' + odv.pagamento_status}
+                                            {odv.pagamento_valor ? ` R$ ${odv.pagamento_valor.toFixed(2).replace('.', ',')}` : ''}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {brechas.some(b => b.pipeline_id === odv.id) && (
+                                        <div className="flex items-center gap-1 mt-1 px-2 py-0.5 bg-orange-50 border border-orange-200 rounded-md w-fit">
+                                          <AlertTriangle size={11} className="text-orange-500" />
+                                          <span className="text-[10px] font-semibold text-orange-600">
+                                            {brechas.filter(b => b.pipeline_id === odv.id).length} brecha{brechas.filter(b => b.pipeline_id === odv.id).length > 1 ? 's' : ''}
+                                          </span>
                                         </div>
                                       )}
                                       {odv.produto_interesse && (
@@ -565,6 +625,74 @@ export default function Pipeline() {
             </div>
           )}
         </div>
+      )}
+
+      {/* Modal de Brechas */}
+      {mostrarBrechas && (
+        <Modal isOpen onClose={() => setMostrarBrechas(false)} titulo="Brechas no Funil" tamanho="lg">
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {brechas.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-8">Nenhuma brecha detectada. Tudo fluindo bem!</p>
+            )}
+            {brechas.map(b => {
+              const tipoCores: Record<string, string> = {
+                inatividade: 'bg-yellow-50 border-yellow-200 text-yellow-700',
+                sem_followup: 'bg-orange-50 border-orange-200 text-orange-700',
+                opt_out: 'bg-red-50 border-red-200 text-red-700',
+                problema: 'bg-red-50 border-red-200 text-red-700',
+                reengajamento: 'bg-blue-50 border-blue-200 text-blue-700',
+                pagamento_pendente: 'bg-purple-50 border-purple-200 text-purple-700',
+              };
+              const tipoLabels: Record<string, string> = {
+                inatividade: 'Inatividade',
+                sem_followup: 'Sem follow-up',
+                opt_out: 'Opt-out',
+                problema: 'Problema',
+                reengajamento: 'Reengajamento',
+                pagamento_pendente: 'Pgto pendente',
+              };
+              return (
+                <div key={b.id} className={`p-3 rounded-lg border ${tipoCores[b.tipo] || 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/60">
+                          {tipoLabels[b.tipo] || b.tipo}
+                        </span>
+                        {b.odv_titulo && <span className="text-xs opacity-75">{b.odv_titulo}</span>}
+                      </div>
+                      <p className="text-sm">{b.descricao}</p>
+                      <div className="flex items-center gap-3 mt-1">
+                        {b.cliente_nome && <span className="text-xs opacity-60"><User size={10} className="inline mr-0.5" />{b.cliente_nome}</span>}
+                        {b.estagio && <span className="text-xs opacity-60">{b.estagio}</span>}
+                        <span className="text-xs opacity-50">{b.criado_em?.substring(0, 16)}</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await api.put(`/brechas/${b.id}/resolver`);
+                        setBrechas(prev => prev.filter(x => x.id !== b.id));
+                      }}
+                      className="p-1 hover:bg-white/50 rounded text-xs font-medium opacity-60 hover:opacity-100"
+                      title="Marcar como resolvida"
+                    >
+                      Resolver
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between mt-4 pt-3 border-t border-gray-100">
+            <Button variante="secundario" tamanho="sm" onClick={async () => {
+              const { data } = await api.post('/brechas/detectar');
+              if (data.recentes) setBrechas(data.recentes);
+            }}>
+              <RefreshCw size={14} /> Escanear agora
+            </Button>
+            <Button variante="secundario" tamanho="sm" onClick={() => setMostrarBrechas(false)}>Fechar</Button>
+          </div>
+        </Modal>
       )}
 
       {/* Visao Funil */}

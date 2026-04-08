@@ -31,4 +31,23 @@ router.post('/:id/aplicar-melhoria', adminOnly, (req, res) => controller.aplicar
 // Upload de midia para simulador
 router.post('/:id/upload-midia', adminOnly, upload.single('arquivo'), (req, res) => controller.uploadMidia(req, res));
 
+// ===== SKILLS =====
+router.get('/:id/skills', adminOnly, (req, res) => controller.listarSkills(req, res));
+router.post('/:id/skills', adminOnly, (req, res) => controller.criarSkill(req, res));
+router.put('/:id/skills/reorder', adminOnly, (req, res) => controller.reordenarSkills(req, res));
+router.put('/:id/skills/:skillId', adminOnly, (req, res) => controller.atualizarSkill(req, res));
+router.delete('/:id/skills/:skillId', adminOnly, (req, res) => controller.excluirSkill(req, res));
+router.post('/:id/skills/seed', adminOnly, (req, res) => controller.seedSkills(req, res));
+router.get('/:id/skills/preview', adminOnly, (req, res) => controller.previewPrompt(req, res));
+router.get('/skills/templates', adminOnly, (req, res) => controller.getSkillTemplates(req, res));
+
+// ===== APRENDIZADO =====
+router.get('/:id/learnings', adminOnly, (req, res) => controller.listarSugestoes(req, res));
+router.post('/:id/learnings/:learningId/aprovar', adminOnly, (req, res) => controller.aprovarSugestao(req, res));
+router.post('/:id/learnings/:learningId/rejeitar', adminOnly, (req, res) => controller.rejeitarSugestao(req, res));
+
+// ===== RELATORIOS =====
+router.get('/:id/reports', adminOnly, (req, res) => controller.listarRelatorios(req, res));
+router.post('/:id/reports/gerar', adminOnly, (req, res) => controller.gerarRelatorio(req, res));
+
 export default router;

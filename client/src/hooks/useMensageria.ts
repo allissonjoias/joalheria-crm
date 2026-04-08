@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
+import { agoraLocal } from '../utils/timezone';
 
 export type Canal = 'whatsapp' | 'instagram_dm' | 'instagram_comment' | 'todos';
 
@@ -75,6 +76,8 @@ export function useMensageria() {
   const [scoringLoading, setScoringLoading] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const lastConversasHashRef = useRef('');
+
   const carregarConversas = useCallback(async (canal?: Canal) => {
     try {
       const filtro = canal || filtroCanal;
@@ -84,7 +87,12 @@ export function useMensageria() {
       }
 
       const { data } = await api.get('/mensageria/conversas', { params });
-      setConversas(data);
+      // So atualizar se realmente mudou (evita re-render da lista inteira)
+      const hash = data.map((c: any) => `${c.id}:${c.ultima_msg_em}:${c.nao_lidas}`).join('|');
+      if (hash !== lastConversasHashRef.current) {
+        lastConversasHashRef.current = hash;
+        setConversas(data);
+      }
     } catch (e) {
       console.error('Erro ao carregar conversas:', e);
     }
@@ -95,6 +103,10 @@ export function useMensageria() {
       const { data } = await api.get(`/mensageria/conversas/${id}`);
       setConversaAtual(data.conversa);
       setMensagens(data.mensagens);
+      // Atualizar refs de comparacao
+      const msgs = data.mensagens as Mensagem[];
+      lastMsgCountRef.current = msgs.length;
+      lastMsgIdRef.current = msgs.length > 0 ? msgs[msgs.length - 1].id : '';
       setDadosExtraidos(data.dadosExtraidos);
       setScoring(null); // Reset scoring ao trocar conversa
       // Zerar contador de nao lidas localmente
@@ -120,7 +132,7 @@ export function useMensageria() {
       status_envio: 'pendente',
       tipo_midia: 'texto',
       midia_url: '',
-      criado_em: new Date().toISOString(),
+      criado_em: agoraLocal(),
     };
     setMensagens(prev => [...prev, tempMsg]);
 
@@ -177,7 +189,7 @@ export function useMensageria() {
         status_envio: 'enviado',
         tipo_midia: 'texto',
         midia_url: '',
-        criado_em: new Date().toISOString(),
+        criado_em: agoraLocal(),
         dados_extraidos: data.dados_extraidos ? JSON.stringify(data.dados_extraidos) : undefined,
       };
       setMensagens(prev => [...prev, daraMsg]);
@@ -206,7 +218,7 @@ export function useMensageria() {
     const tipoMidia = arquivo.type.startsWith('image/') ? 'imagem'
       : arquivo.type.startsWith('audio/') ? 'audio'
       : arquivo.type.startsWith('video/') ? 'video'
-      : 'imagem';
+      : 'documento';
     const tempUrl = URL.createObjectURL(arquivo);
     const tempMsg: Mensagem = {
       id: 'temp-media-' + Date.now(),
@@ -218,7 +230,7 @@ export function useMensageria() {
       status_envio: 'pendente',
       tipo_midia: tipoMidia,
       midia_url: tempUrl,
-      criado_em: new Date().toISOString(),
+      criado_em: agoraLocal(),
     };
     setMensagens(prev => [...prev, tempMsg]);
 
@@ -277,6 +289,10 @@ export function useMensageria() {
     }
   };
 
+  // Ref para comparar se mensagens realmente mudaram
+  const lastMsgCountRef = useRef(0);
+  const lastMsgIdRef = useRef('');
+
   // Polling every 5s
   useEffect(() => {
     carregarConversas();
@@ -286,7 +302,14 @@ export function useMensageria() {
       if (conversaAtual) {
         // Refresh current conversation messages
         api.get(`/mensageria/conversas/${conversaAtual.id}`).then(({ data }) => {
-          setMensagens(data.mensagens);
+          const newMsgs = data.mensagens as Mensagem[];
+          const lastId = newMsgs.length > 0 ? newMsgs[newMsgs.length - 1].id : '';
+          // So atualizar se realmente mudou (nova mensagem ou quantidade diferente)
+          if (newMsgs.length !== lastMsgCountRef.current || lastId !== lastMsgIdRef.current) {
+            lastMsgCountRef.current = newMsgs.length;
+            lastMsgIdRef.current = lastId;
+            setMensagens(newMsgs);
+          }
           if (data.dadosExtraidos) setDadosExtraidos(data.dadosExtraidos);
         }).catch(() => {});
       }
@@ -307,6 +330,18 @@ export function useMensageria() {
       await carregarConversas();
     } catch (e) {
       console.error('Erro ao excluir conversa:', e);
+    }
+  };
+
+  const limparMensagens = async (id: string) => {
+    try {
+      await api.delete(`/mensageria/conversas/${id}/mensagens`);
+      if (conversaAtual?.id === id) {
+        setMensagens([]);
+      }
+      await carregarConversas();
+    } catch (e) {
+      console.error('Erro ao limpar mensagens:', e);
     }
   };
 
@@ -331,5 +366,6 @@ export function useMensageria() {
     toggleModoAuto,
     solicitarScoring,
     excluirConversa,
+    limparMensagens,
   };
 }

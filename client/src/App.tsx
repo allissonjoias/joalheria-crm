@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { Layout } from './components/layout/Layout';
 import { AjudaCrmWidget } from './components/ui/AjudaCrmWidget';
+import { InstallPrompt } from './components/pwa/InstallPrompt';
+import { PushNotificationPrompt } from './components/pwa/PushNotifications';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Mensageria from './pages/Mensageria';
@@ -14,6 +16,7 @@ import Configuracoes from './pages/Configuracoes';
 import WhatsAppPage from './pages/WhatsApp';
 import AgentesIA from './pages/AgentesIA';
 import Simulador from './pages/Simulador';
+import SimuladorMeta from './pages/SimuladorMeta';
 import Automacoes from './pages/Automacoes';
 
 export default function App() {
@@ -34,6 +37,7 @@ export default function App() {
             <Route path="/whatsapp" element={<WhatsAppPage />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/simulador" element={<Simulador />} />
+            <Route path="/simulador-meta" element={<SimuladorMeta />} />
             <Route path="/automacoes" element={<Automacoes />} />
             {/* Redirects */}
             <Route path="/chat" element={<Navigate to="/agentes-ia" replace />} />
@@ -43,6 +47,8 @@ export default function App() {
           </Route>
         </Routes>
         <AjudaCrmWidget />
+        <InstallPrompt />
+        <PushNotificationPrompt />
       </AuthProvider>
     </BrowserRouter>
   );

@@ -130,6 +130,9 @@ export class WebhookService {
         // Instagram DMs (messaging field)
         const messaging = entry.messaging || [];
         for (const msg of messaging) {
+          // Ignorar echos (mensagens enviadas pela própria página) e edições
+          if (msg.message?.is_echo || msg.message_edit) continue;
+
           if (msg.message) {
             const event: InstagramDMMessage = {
               type: 'instagram_dm',

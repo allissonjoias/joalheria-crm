@@ -8,6 +8,8 @@ import { Input } from '../components/ui/Input';
 import { ApiKeysForm } from '../components/config/ApiKeysForm';
 import { InstagramContasForm } from '../components/config/InstagramContasForm';
 import { MetaApiForm } from '../components/config/MetaApiForm';
+import { ManyChatForm } from '../components/config/ManyChatForm';
+import { FusoHorarioForm } from '../components/config/FusoHorarioForm';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -77,11 +79,11 @@ export default function Configuracoes() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-alisson-600 mb-6">Configuracoes</h1>
+      <h1 className="hidden md:block text-2xl font-bold text-alisson-600 mb-6">Configuracoes</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Profile */}
-        <Card className="p-6">
+        <Card className="p-4 md:p-6">
           <Tooltip texto="Dados do seu perfil de acesso ao CRM" posicao="right">
             <h2 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
               <Shield size={20} className="text-alisson-600" /> Meu Perfil
@@ -175,6 +177,13 @@ export default function Configuracoes() {
           </Card>
         )}
 
+        {/* Fuso Horario - admin only */}
+        {isAdmin && (
+          <div className="lg:col-span-2">
+            <FusoHorarioForm />
+          </div>
+        )}
+
         {/* API Keys Config - admin only */}
         {isAdmin && (
           <div className="lg:col-span-2">
@@ -193,6 +202,13 @@ export default function Configuracoes() {
         {isAdmin && (
           <div className="lg:col-span-2">
             <MetaApiForm />
+          </div>
+        )}
+
+        {/* ManyChat - admin only */}
+        {isAdmin && (
+          <div className="lg:col-span-2">
+            <ManyChatForm />
           </div>
         )}
       </div>

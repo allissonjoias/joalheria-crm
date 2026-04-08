@@ -47,7 +47,7 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
   // Estado do preview de midia
   const [previewArquivo, setPreviewArquivo] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewTipo, setPreviewTipo] = useState<'image' | 'video' | null>(null);
+  const [previewTipo, setPreviewTipo] = useState<'image' | 'video' | 'document' | null>(null);
   const [caption, setCaption] = useState('');
 
   // Limpar timer ao desmontar
@@ -144,9 +144,11 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
       setPreviewTipo('video');
       setCaption('');
     } else {
-      // Documentos e outros: enviar imediatamente sem preview
-      onEnviarMidia(file);
-      e.target.value = '';
+      // Documentos: mostrar preview com nome do arquivo
+      setPreviewArquivo(file);
+      setPreviewUrl('');
+      setPreviewTipo('document');
+      setCaption('');
     }
   };
 
@@ -264,7 +266,7 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
 
   return (
     <>
-    <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-3 bg-wa-bg-panel border-t border-wa-border">
+    <form onSubmit={handleSubmit} className="flex items-center gap-1.5 md:gap-2 px-2 md:px-4 py-2 md:py-3 bg-wa-bg-panel border-t border-wa-border" style={{ paddingBottom: `max(0.5rem, env(safe-area-inset-bottom, 0.5rem))` }}>
       {/* Input de arquivo oculto */}
       <input
         ref={fileInputRef}
@@ -274,13 +276,13 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
         onChange={handleFileChange}
       />
 
-      {/* Botao IA */}
+      {/* Botao IA - hidden no mobile */}
       <Tooltip texto="A IA gera uma resposta automatica para o cliente com base no historico da conversa" posicao="top">
         <button
           type="button"
           onClick={onEnviarComDara}
           disabled={desabilitado}
-          className="p-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
+          className="hidden md:flex p-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full transition-colors disabled:opacity-50 flex-shrink-0 items-center justify-center"
         >
           <Bot size={20} />
         </button>
@@ -294,12 +296,12 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
           disabled={desabilitado}
           className="text-gray-500 hover:text-gray-600 flex-shrink-0 disabled:opacity-50"
         >
-          <Paperclip size={24} />
+          <Paperclip size={22} className="md:w-6 md:h-6" />
         </button>
       </Tooltip>
 
-      {/* Botao emoji + picker */}
-      <div className="relative flex-shrink-0" ref={emojiPickerRef}>
+      {/* Botao emoji + picker - hidden no mobile */}
+      <div className="relative flex-shrink-0 hidden md:block" ref={emojiPickerRef}>
         <Tooltip texto="Inserir emoji" posicao="top">
           <button
             type="button"
@@ -312,7 +314,7 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
         </Tooltip>
 
         {emojiAberto && (
-          <div className="absolute bottom-10 left-0 z-50 w-72 bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col">
+          <div className="absolute bottom-10 left-0 right-0 md:right-auto z-50 md:w-72 bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col">
             {/* Abas de categorias */}
             <div className="flex border-b border-gray-100">
               {EMOJI_CATEGORIAS.map((cat, i) => (
@@ -354,7 +356,7 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
         onChange={(e) => setTexto(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className="flex-1 px-4 py-2.5 bg-white rounded-full text-sm text-gray-800 placeholder-gray-400 focus:outline-none border border-wa-border"
+        className="flex-1 min-w-0 px-3 md:px-4 py-2 md:py-2.5 bg-white rounded-full text-sm text-gray-800 placeholder-gray-400 focus:outline-none border border-wa-border"
         disabled={desabilitado}
       />
 
@@ -364,9 +366,9 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
           <button
             type="submit"
             disabled={desabilitado || !texto.trim()}
-            className="p-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
+            className="p-2 md:p-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
           >
-            <Send size={20} />
+            <Send size={18} className="md:w-5 md:h-5" />
           </button>
         </Tooltip>
       ) : (
@@ -375,16 +377,16 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
             type="button"
             onClick={iniciarGravacao}
             disabled={desabilitado}
-            className="p-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
+            className="p-2 md:p-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-full transition-colors disabled:opacity-50 flex-shrink-0"
           >
-            <Mic size={20} />
+            <Mic size={18} className="md:w-5 md:h-5" />
           </button>
         </Tooltip>
       )}
     </form>
 
       {/* Modal de preview de midia */}
-      {previewArquivo && previewUrl && (
+      {previewArquivo && (
         <div className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50">
           {/* Botao fechar */}
           <button
@@ -397,10 +399,18 @@ export function MensageriaInput({ onEnviar, onEnviarComDara, onEnviarMidia, desa
 
           {/* Preview */}
           <div className="flex-1 flex items-center justify-center p-8 max-w-3xl w-full">
-            {previewTipo === 'image' ? (
+            {previewTipo === 'image' && previewUrl ? (
               <img src={previewUrl} alt="Preview" className="max-h-[60vh] max-w-full rounded-lg object-contain" />
-            ) : previewTipo === 'video' ? (
+            ) : previewTipo === 'video' && previewUrl ? (
               <video src={previewUrl} controls className="max-h-[60vh] max-w-full rounded-lg" />
+            ) : previewTipo === 'document' ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-24 h-24 rounded-2xl bg-white/10 flex items-center justify-center">
+                  <FileText size={48} className="text-white/80" />
+                </div>
+                <p className="text-white text-lg font-medium">{previewArquivo.name}</p>
+                <p className="text-white/50 text-sm">{(previewArquivo.size / 1024).toFixed(0)} KB</p>
+              </div>
             ) : null}
           </div>
 

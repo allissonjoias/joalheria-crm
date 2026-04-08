@@ -437,9 +437,18 @@ export class AutomacaoEngineService {
         evo.enviarTexto(destino, texto).catch((e: any) =>
           console.error('[AUTOMACAO] Erro envio WhatsApp:', e.message)
         );
+      } else if (canal === 'instagram_dm' || canal === 'instagram') {
+        const { InstagramService } = require('./instagram.service');
+        const ig = new InstagramService();
+        // Buscar conta Instagram ativa para enviar
+        const contas = ig.listarContas();
+        const contaAtiva = contas.find((c: any) => c.ativo);
+        if (contaAtiva) {
+          ig.enviarDM(contaAtiva.id, destino, texto).catch((e: any) =>
+            console.error('[AUTOMACAO] Erro envio Instagram DM:', e.message)
+          );
+        }
       }
-      // Instagram: usar meta API
-      // TODO: implementar envio Instagram DM via Meta API
     } catch (e: any) {
       console.error('[AUTOMACAO] Erro ao enfileirar:', e.message);
     }

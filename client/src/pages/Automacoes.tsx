@@ -143,16 +143,16 @@ export default function Automacoes() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="p-3 md:p-6">
+      <div className="flex justify-between items-center mb-4 md:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Automacoes</h1>
-          <p className="text-sm text-gray-500">Crie fluxos automatizados para WhatsApp e Instagram</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">Automacoes</h1>
+          <p className="text-xs md:text-sm text-gray-500">Fluxos automatizados para WhatsApp e Instagram</p>
         </div>
       </div>
 
       {/* Abas */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 mb-4 md:mb-6 bg-gray-100 rounded-lg p-1 w-full md:w-fit overflow-x-auto">
         {([
           { key: 'fluxos' as Aba, label: 'Fluxos', icon: Zap },
           { key: 'campanhas' as Aba, label: 'Campanhas', icon: Mail },

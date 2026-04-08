@@ -64,10 +64,10 @@ export default function Lembretes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3 md:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-alisson-600">Lembretes</h1>
-          <p className="text-gray-500 text-sm mt-1">{pendentes.length} pendentes</p>
+          <h1 className="hidden md:block text-2xl font-bold text-alisson-600">Lembretes</h1>
+          <p className="text-gray-500 text-xs md:text-sm mt-1">{pendentes.length} pendentes</p>
         </div>
         <Tooltip texto="Criar um lembrete para follow-up, ligacao ou tarefa com data de vencimento" posicao="left">
           <Button onClick={() => setModalAberto(true)}>

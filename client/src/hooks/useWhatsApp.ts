@@ -131,14 +131,14 @@ export function useWhatsApp() {
     }
   };
 
-  const obterQRCode = async (id: string): Promise<string | null> => {
+  const obterQRCode = useCallback(async (id: string): Promise<string | null> => {
     try {
       const { data } = await api.get(`/whatsapp/instancias/${id}/qrcode`);
       return data?.base64 || null;
     } catch {
       return null;
     }
-  };
+  }, []);
 
   // --- Envio e campanhas ---
 

@@ -26,6 +26,8 @@ const MIGRATION_CICLO_VIDA_PATH = path.resolve(__dirname, '../models/migration_c
 const MIGRATION_ESTORNO_PATH = path.resolve(__dirname, '../models/migration_estorno.sql');
 const MIGRATION_META_API_PATH = path.resolve(__dirname, '../models/migration_meta_api.sql');
 const MIGRATION_AUTOMACAO_PATH = path.resolve(__dirname, '../models/migration_automacao.sql');
+const MIGRATION_MANYCHAT_PATH = path.resolve(__dirname, '../models/migration_manychat.sql');
+const MIGRATION_BRECHAS_PATH = path.resolve(__dirname, '../models/migration_brechas.sql');
 
 let db: SqlJsDatabase | null = null;
 
@@ -52,6 +54,52 @@ export function saveDb() {
 
 // Auto-save periodically
 let saveTimer: ReturnType<typeof setInterval> | null = null;
+
+// Gera datetime local no formato 'YYYY-MM-DD HH:MM:SS' respeitando process.env.TZ
+function localNow(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+// Cache de tabelas que possuem coluna criado_em (populado no init)
+const tabelasComCriadoEm = new Set<string>();
+
+function buildTabelasCriadoEmCache(rawDb: SqlJsDatabase) {
+  tabelasComCriadoEm.clear();
+  try {
+    const tables = rawDb.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+    if (!tables.length) return;
+    for (const row of tables[0].values) {
+      const tableName = row[0] as string;
+      const cols = rawDb.exec(`PRAGMA table_info('${tableName}')`);
+      if (cols.length && cols[0].values.some((c: any) => c[1] === 'criado_em')) {
+        tabelasComCriadoEm.add(tableName);
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+// Regex para extrair nome da tabela de um INSERT
+const insertRegex = /INSERT\s+(?:OR\s+\w+\s+)?INTO\s+(\w+)/i;
+
+// Apos um INSERT em tabela com criado_em, corrige o timestamp se nao foi fornecido explicitamente
+function fixInsertTimestamp(rawDb: SqlJsDatabase, sql: string) {
+  if (!sql.trimStart().toUpperCase().startsWith('INSERT')) return;
+  // Se o SQL ja inclui criado_em explicitamente, nao precisa corrigir
+  if (/criado_em/i.test(sql)) return;
+  const match = sql.match(insertRegex);
+  if (!match) return;
+  const table = match[1];
+  if (!tabelasComCriadoEm.has(table)) return;
+  try {
+    const rowid = rawDb.exec('SELECT last_insert_rowid()');
+    if (rowid.length && rowid[0].values.length) {
+      const id = rowid[0].values[0][0];
+      rawDb.run(`UPDATE ${table} SET criado_em = ? WHERE rowid = ?`, [localNow(), id]);
+    }
+  } catch { /* ignore */ }
+}
 
 function createWrapper(rawDb: SqlJsDatabase): DatabaseLike {
   return {
@@ -90,6 +138,7 @@ function createWrapper(rawDb: SqlJsDatabase): DatabaseLike {
         run(...params: any[]): { changes: number } {
           try {
             rawDb.run(sql, params);
+            fixInsertTimestamp(rawDb, sql);
             saveDb();
             return { changes: rawDb.getRowsModified() };
           } catch (e) {
@@ -945,6 +994,129 @@ async function runAutomacaoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabas
   }
 }
 
+async function runBrechasMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='brechas_log'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration Brechas Engine...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_BRECHAS_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+          console.error('Brechas migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Brechas Engine aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Brechas:', e);
+  }
+}
+
+async function runManyChatMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='manychat_config'"
+  ).get();
+
+  if (tableExists) return;
+
+  console.log('Rodando migration ManyChat...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_MANYCHAT_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists')) {
+          console.error('ManyChat migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration ManyChat aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration ManyChat:', e);
+  }
+}
+
+async function runConfigGeralMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='config_geral'"
+  ).get();
+
+  if (!tableExists) {
+    console.log('Rodando migration Config Geral...');
+    try {
+      rawDb.exec(`
+        CREATE TABLE IF NOT EXISTS config_geral (
+          chave TEXT PRIMARY KEY,
+          valor TEXT NOT NULL,
+          atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
+        );
+        INSERT OR IGNORE INTO config_geral (chave, valor) VALUES ('fuso_horario', 'America/Fortaleza');
+      `);
+      saveDb();
+      console.log('Migration Config Geral aplicada com sucesso!');
+    } catch (e) {
+      console.error('Erro ao rodar migration Config Geral:', e);
+    }
+  }
+
+}
+
+async function runStickerMigration(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Atualizar CHECK constraint de tipo_midia para incluir 'sticker'
+  try {
+    const tableInfo = rawDb.exec("SELECT sql FROM sqlite_master WHERE type='table' AND name='mensagens'");
+    if (tableInfo.length > 0) {
+      const sql = tableInfo[0].values[0][0] as string;
+      if (sql && sql.includes("tipo_midia") && (!sql.includes("'sticker'") || !sql.includes("'documento'"))) {
+        console.log('Rodando migration Sticker/Documento...');
+        const newSql = sql.replace(
+          /tipo_midia IN\s*\([^)]+\)/,
+          "tipo_midia IN ('texto', 'imagem', 'audio', 'video', 'comentario', 'sticker', 'documento')"
+        );
+        rawDb.exec('PRAGMA writable_schema = ON');
+        rawDb.exec(`UPDATE sqlite_master SET sql = '${newSql.replace(/'/g, "''")}' WHERE type='table' AND name='mensagens'`);
+        rawDb.exec('PRAGMA writable_schema = OFF');
+        rawDb.exec('PRAGMA integrity_check');
+        saveDb();
+        console.log('Migration Sticker aplicada com sucesso!');
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao rodar migration Sticker:', e);
+    // Fallback: se nao conseguir alterar constraint, stickers serao salvos como 'imagem'
+  }
+}
+
 let initPromise: Promise<DatabaseLike> | null = null;
 
 export function initDatabase(): Promise<DatabaseLike> {
@@ -1008,6 +1180,27 @@ export function initDatabase(): Promise<DatabaseLike> {
     await runEstornoMigrations(wrapper, db);
     await runMetaApiMigrations(wrapper, db);
     await runAutomacaoMigrations(wrapper, db);
+    await runManyChatMigrations(wrapper, db);
+    await runBrechasMigrations(wrapper, db);
+    await runConfigGeralMigrations(wrapper, db);
+    await runStickerMigration(wrapper, db);
+
+    // Construir cache de tabelas com criado_em para o interceptor de INSERT
+    buildTabelasCriadoEmCache(db);
+
+    // Marcar que o interceptor de timezone esta ativo
+    // A partir daqui, todo INSERT sem criado_em tera o timestamp corrigido pelo wrapper
+    // Dados anteriores ja foram corrigidos na v1 da migration
+    try {
+      const jaCorrigiu = wrapper.prepare(
+        "SELECT valor FROM config_geral WHERE chave = 'tz_fix_v2'"
+      ).get() as any;
+      if (!jaCorrigiu) {
+        db.exec("INSERT OR REPLACE INTO config_geral (chave, valor) VALUES ('tz_fix_v2', '1')");
+        saveDb();
+        console.log('Interceptor de timezone ativo para novos INSERTs.');
+      }
+    } catch { /* ignore */ }
 
     // Atualizar modelos descontinuados para versoes atuais
     try {
@@ -1103,6 +1296,77 @@ export function initDatabase(): Promise<DatabaseLike> {
         saveDb();
         console.log('Coluna ultima_leitura adicionada em conversas');
       }
+    } catch (e) { /* already exists */ }
+
+    // Migration: agent_skills table
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS agent_skills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_id INTEGER NOT NULL,
+        nome TEXT NOT NULL,
+        tipo TEXT NOT NULL DEFAULT 'prompt',
+        categoria TEXT NOT NULL DEFAULT 'geral',
+        conteudo TEXT NOT NULL DEFAULT '',
+        ativo INTEGER DEFAULT 1,
+        prioridade INTEGER DEFAULT 50,
+        icone TEXT DEFAULT 'brain',
+        origem TEXT DEFAULT 'manual',
+        criado_em TEXT DEFAULT (datetime('now','localtime')),
+        atualizado_em TEXT DEFAULT (datetime('now','localtime'))
+      )`);
+    } catch (e) { /* already exists */ }
+
+    // Migration: tipo_skill column on agent_skills
+    try {
+      const skillCols = wrapper.prepare("PRAGMA table_info(agent_skills)").all() as any[];
+      if (skillCols.length > 0 && !skillCols.some((c: any) => c.name === 'tipo_skill')) {
+        db.exec("ALTER TABLE agent_skills ADD COLUMN tipo_skill TEXT DEFAULT 'sub_agente'");
+        saveDb();
+      }
+    } catch (e) { /* already exists */ }
+
+    // Migration: max_tokens, temperatura columns on agentes_ia
+    try {
+      const agCols = wrapper.prepare("PRAGMA table_info(agentes_ia)").all() as any[];
+      if (agCols.length > 0 && !agCols.some((c: any) => c.name === 'max_tokens')) {
+        db.exec("ALTER TABLE agentes_ia ADD COLUMN max_tokens INTEGER DEFAULT 500");
+        saveDb();
+      }
+      if (agCols.length > 0 && !agCols.some((c: any) => c.name === 'temperatura')) {
+        db.exec("ALTER TABLE agentes_ia ADD COLUMN temperatura REAL DEFAULT 0.7");
+        saveDb();
+      }
+    } catch (e) { /* already exists */ }
+
+    // Migration: skill_learnings table
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS skill_learnings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        descricao TEXT NOT NULL,
+        evidencias TEXT,
+        conteudo_skill TEXT,
+        aprovado INTEGER DEFAULT 0,
+        confianca REAL DEFAULT 0,
+        ocorrencias INTEGER DEFAULT 1,
+        criado_em TEXT DEFAULT (datetime('now','localtime')),
+        atualizado_em TEXT DEFAULT (datetime('now','localtime'))
+      )`);
+    } catch (e) { /* already exists */ }
+
+    // Migration: skill_reports table
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS skill_reports (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_id INTEGER NOT NULL,
+        tipo TEXT NOT NULL DEFAULT 'diario',
+        data_referencia TEXT NOT NULL,
+        conteudo TEXT NOT NULL,
+        metricas TEXT,
+        sugestoes TEXT,
+        criado_em TEXT DEFAULT (datetime('now','localtime'))
+      )`);
     } catch (e) { /* already exists */ }
 
     // Auto-save every 5 seconds

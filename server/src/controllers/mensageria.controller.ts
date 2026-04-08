@@ -1,14 +1,42 @@
 import { Request, Response } from 'express';
 import path from 'path';
+import fs from 'fs';
+import https from 'https';
+import http from 'http';
 import { getDb, saveDb } from '../config/database';
 import { MensageriaService } from '../services/mensageria.service';
 import { ClaudeService, MensagemChat } from '../services/claude.service';
+import { hojeLocal } from '../utils/timezone';
 import { EvolutionService } from '../services/evolution.service';
 
 const mensageriaService = new MensageriaService();
 const claudeService = new ClaudeService();
 const evolutionService = new EvolutionService();
 const UPLOADS_DIR = path.resolve(__dirname, '../../../uploads');
+const AVATARS_DIR = path.resolve(UPLOADS_DIR, 'avatars');
+
+// Garantir que a pasta de avatars existe
+if (!fs.existsSync(AVATARS_DIR)) {
+  fs.mkdirSync(AVATARS_DIR, { recursive: true });
+}
+
+function downloadImage(url: string, dest: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const client = url.startsWith('https') ? https : http;
+    const file = fs.createWriteStream(dest);
+    client.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        file.close();
+        fs.unlinkSync(dest);
+        resolve(false);
+        return;
+      }
+      response.pipe(file);
+      file.on('finish', () => { file.close(); resolve(true); });
+      file.on('error', () => { file.close(); try { fs.unlinkSync(dest); } catch {} resolve(false); });
+    }).on('error', () => { file.close(); try { fs.unlinkSync(dest); } catch {} resolve(false); });
+  });
+}
 
 export class MensageriaController {
   // GET /api/mensageria/conversas
@@ -230,7 +258,7 @@ export class MensageriaController {
       'SELECT COUNT(*) as total FROM conversas WHERE modo_auto = 1 AND ativa = 1'
     ).get() as any;
 
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     const mensagensHoje = db.prepare(
       "SELECT COUNT(*) as total FROM mensagens WHERE criado_em >= ?"
     ).get(hoje) as any;
@@ -332,6 +360,24 @@ export class MensageriaController {
     }
   }
 
+  // DELETE /api/mensageria/conversas/:id/mensagens - Limpa mensagens de uma conversa
+  limparMensagens(req: Request, res: Response) {
+    try {
+      const db = getDb();
+      const conversaId = req.params.id;
+      const conversa = db.prepare('SELECT id FROM conversas WHERE id = ?').get(conversaId) as any;
+      if (!conversa) return res.status(404).json({ erro: 'Conversa não encontrada' });
+
+      const result = db.prepare('DELETE FROM mensagens WHERE conversa_id = ?').run(conversaId);
+      db.prepare("UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?").run(conversaId);
+      saveDb();
+      console.log(`[Mensageria] ${result.changes} mensagens apagadas da conversa ${conversaId}`);
+      res.json({ ok: true, apagadas: result.changes });
+    } catch (e: any) {
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
   obterSdrInfo(req: Request, res: Response) {
     try {
       const db = getDb();
@@ -405,14 +451,16 @@ export class MensageriaController {
     }
 
     const db = getDb();
+    // Buscar clientes sem foto local ou com foto de URL externa (pps.whatsapp.net)
     const clientes = db.prepare(
-      "SELECT id, telefone FROM clientes WHERE telefone IS NOT NULL AND telefone != '' AND (foto_perfil IS NULL OR foto_perfil = '')"
+      `SELECT id, telefone, foto_perfil FROM clientes
+       WHERE telefone IS NOT NULL AND telefone != ''
+       AND (foto_perfil IS NULL OR foto_perfil = '' OR foto_perfil LIKE '%pps.whatsapp.net%')`
     ).all() as any[];
 
     let atualizados = 0;
     const total = clientes.length;
 
-    // Processar em lotes para nao sobrecarregar
     for (const cliente of clientes) {
       try {
         const telefone = cliente.telefone.replace(/\D/g, '');
@@ -420,12 +468,19 @@ export class MensageriaController {
 
         const url = await evolutionService.buscarFotoPerfil(telefone);
         if (url) {
-          db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(url, cliente.id);
-          atualizados++;
+          // Baixar imagem para pasta local
+          const filename = `avatar_${cliente.id}.jpg`;
+          const filepath = path.join(AVATARS_DIR, filename);
+          const ok = await downloadImage(url, filepath);
+          if (ok) {
+            const localUrl = `/uploads/avatars/${filename}`;
+            db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(localUrl, cliente.id);
+            atualizados++;
+          }
         }
 
-        // Rate limit - esperar 200ms entre requisicoes
-        await new Promise(r => setTimeout(r, 200));
+        // Rate limit
+        await new Promise(r => setTimeout(r, 300));
       } catch {}
     }
 

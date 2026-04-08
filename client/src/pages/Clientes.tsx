@@ -181,24 +181,24 @@ export default function Clientes() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-alisson-600">Clientes</h1>
-        <Button onClick={() => { setClienteSelecionado(null); setForm(FORM_VAZIO); setAbaForm('basico'); setModalAberto(true); }}>
-          <Plus size={16} /> Novo Cliente
+      <div className="flex items-center justify-between mb-3 md:mb-6">
+        <h1 className="hidden md:block text-2xl font-bold text-alisson-600">Clientes</h1>
+        <Button onClick={() => { setClienteSelecionado(null); setForm(FORM_VAZIO); setAbaForm('basico'); setModalAberto(true); }} tamanho="sm" className="md:!text-sm">
+          <Plus size={16} /> <span className="hidden sm:inline">Novo Cliente</span><span className="sm:hidden">Novo</span>
         </Button>
       </div>
 
-      <div className="mb-4 relative">
+      <div className="mb-3 md:mb-4 relative">
         <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           placeholder="Buscar por nome, telefone ou email..."
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400"
+          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm"
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
         {clientes.map((c) => (
           <Card key={c.id} className="p-4" onClick={() => handleVerDetalhes(c)}>
             <div className="flex items-start justify-between mb-3">
@@ -256,15 +256,15 @@ export default function Clientes() {
           {abaForm === 'basico' && (
             <>
               <Input label="Nome *" value={form.nome} onChange={(e) => setForm({...form, nome: e.target.value})} required />
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({...form, telefone: e.target.value})} placeholder="(85) 99999-9999" />
                 <Input label="Email" value={form.email} onChange={(e) => setForm({...form, email: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 <Input label="CPF" value={form.cpf} onChange={(e) => setForm({...form, cpf: e.target.value})} placeholder="000.000.000-00" />
                 <Input label="Data de Nascimento" type="date" value={form.data_nascimento} onChange={(e) => setForm({...form, data_nascimento: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Origem</label>
                   <select value={form.origem} onChange={(e) => setForm({...form, origem: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm">
@@ -288,19 +288,19 @@ export default function Clientes() {
 
           {abaForm === 'endereco' && (
             <>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                 <Input label="CEP" value={form.cep} onChange={(e) => setForm({...form, cep: e.target.value})} onBlur={() => buscarCep(form.cep)} placeholder="60000-000" />
                 <div className="col-span-2">
                   <Input label="Endereco" value={form.endereco} onChange={(e) => setForm({...form, endereco: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                 <Input label="Numero" value={form.numero_endereco} onChange={(e) => setForm({...form, numero_endereco: e.target.value})} />
                 <div className="col-span-2">
                   <Input label="Complemento" value={form.complemento} onChange={(e) => setForm({...form, complemento: e.target.value})} />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                 <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({...form, bairro: e.target.value})} />
                 <Input label="Cidade" value={form.cidade} onChange={(e) => setForm({...form, cidade: e.target.value})} />
                 <div>
@@ -316,7 +316,7 @@ export default function Clientes() {
 
           {abaForm === 'preferencias' && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Interesse</label>
                   <select value={form.tipo_interesse} onChange={(e) => setForm({...form, tipo_interesse: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm">

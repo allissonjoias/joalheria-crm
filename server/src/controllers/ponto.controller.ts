@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { getDb, saveDb } from '../config/database';
+import { hojeLocal } from '../utils/timezone';
 
 export class PontoController {
   // GET /api/ponto/status - status atual do usuario (esta trabalhando ou nao)
   status(req: Request, res: Response) {
     const db = getDb();
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
 
     const ultimo = db.prepare(
       "SELECT * FROM ponto WHERE usuario_id = ? AND criado_em >= ? ORDER BY criado_em DESC LIMIT 1"
@@ -38,7 +39,7 @@ export class PontoController {
   // POST /api/ponto/bater - registrar entrada ou saida
   bater(req: Request, res: Response) {
     const db = getDb();
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
     const { observacao } = req.body;
 
     const ultimo = db.prepare(
@@ -82,7 +83,7 @@ export class PontoController {
   // GET /api/ponto/equipe - quem esta trabalhando agora (admin)
   equipe(req: Request, res: Response) {
     const db = getDb();
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeLocal();
 
     const usuarios = db.prepare(
       'SELECT id, nome, papel FROM usuarios WHERE ativo = 1'

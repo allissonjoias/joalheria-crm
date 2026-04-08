@@ -1,3 +1,5 @@
+import { agoraLocal } from '../utils/timezone';
+
 export interface SdrEvento {
   tipo: 'novo_lead' | 'mudanca_estagio' | 'lead_inativo' | 'venda_fechada' | 'task_vencida';
   prioridade: 'critica' | 'alta' | 'media' | 'baixa';
@@ -81,7 +83,9 @@ export class SdrEventDetectorService {
     diasInatividade: number
   ): SdrEvento[] {
     const eventos: SdrEvento[] = [];
-    const limite = new Date(Date.now() - diasInatividade * 86400000).toISOString();
+    const dLim = new Date(Date.now() - diasInatividade * 86400000);
+    const padL = (n: number) => String(n).padStart(2, '0');
+    const limite = `${dLim.getFullYear()}-${padL(dLim.getMonth() + 1)}-${padL(dLim.getDate())} ${padL(dLim.getHours())}:${padL(dLim.getMinutes())}:${padL(dLim.getSeconds())}`;
 
     for (const deal of deals) {
       if (deal.atualizado_em && deal.atualizado_em < limite) {
@@ -101,7 +105,7 @@ export class SdrEventDetectorService {
   }
 
   classificarTarefasVencidas(tarefas: any[]): SdrEvento[] {
-    const agora = new Date().toISOString();
+    const agora = agoraLocal();
 
     return tarefas
       .filter((t: any) => t.status === 'pendente' && t.data_vencimento && t.data_vencimento < agora)

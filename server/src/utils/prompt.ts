@@ -10,7 +10,7 @@ function getCustomPrompt(): string {
   }
 }
 
-function getProdutosFormatados(): string {
+export function getProdutosFormatados(): string {
   const db = getDb();
   const produtos = db.prepare('SELECT nome, categoria, material, pedra, preco, estoque FROM produtos WHERE ativo = 1').all() as any[];
 
@@ -175,7 +175,7 @@ FUNCIONALIDADES DO CRM:
    - Total de vendas, clientes novos, conversas ativas
    - Graficos de desempenho
 
-2. WHATSALISSON (Mensagens):
+2. MENSAGERIA (Mensagens):
    - Central de mensagens: WhatsApp e Instagram em um so lugar
    - Cada conversa mostra os dados do cliente ao lado
    - Filtros por canal: Todos, WhatsApp, Instagram

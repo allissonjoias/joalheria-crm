@@ -38,7 +38,9 @@ export default function Dashboard() {
   const [topProdutos, setTopProdutos] = useState<any[]>([]);
 
   useEffect(() => {
-    api.get('/dashboard/resumo').then(({ data }) => setResumo(data)).catch(() => {});
+    api.get('/dashboard/resumo').then(({ data }) => setResumo(data)).catch(() => {
+      setResumo({ vendas_total: 0, vendas_valor: 0, vendas_mes_total: 0, vendas_mes_valor: 0, ticket_medio: 0, clientes_total: 0, pipeline: [], lembretes_pendentes: 0 });
+    });
     api.get('/dashboard/vendas-periodo?dias=30').then(({ data }) => setVendasPeriodo(data)).catch(() => {});
     api.get('/dashboard/vendas-categoria').then(({ data }) => setVendasCategoria(data)).catch(() => {});
     api.get('/dashboard/top-produtos').then(({ data }) => setTopProdutos(data)).catch(() => {});
@@ -57,21 +59,22 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-alisson-600 mb-6">Painel</h1>
+      <h1 className="hidden md:block text-2xl font-bold text-alisson-600 mb-6">Painel</h1>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
         {metricas.map((m) => (
           <Tooltip key={m.label} texto={m.dica} posicao="bottom">
-            <Card className="p-5 w-full">
+            <Card className="p-3 md:p-5 w-full">
               <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">{m.label}</p>
-                  <p className="text-2xl font-bold text-alisson-600 mt-1">{m.valor}</p>
-                  <p className="text-xs text-gray-400 mt-1">{m.sub}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs md:text-sm text-gray-500 truncate">{m.label}</p>
+                  <p className="text-lg md:text-2xl font-bold text-alisson-600 mt-1 truncate">{m.valor}</p>
+                  <p className="text-[10px] md:text-xs text-gray-400 mt-1">{m.sub}</p>
                 </div>
-                <div className={`p-3 rounded-lg ${m.cor}`}>
-                  <m.icon size={20} />
+                <div className={`p-2 md:p-3 rounded-lg ${m.cor} flex-shrink-0 ml-2`}>
+                  <m.icon size={16} className="md:hidden" />
+                  <m.icon size={20} className="hidden md:block" />
                 </div>
               </div>
             </Card>
@@ -80,33 +83,33 @@ export default function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-4 md:mb-6">
         <Tooltip texto="Grafico de barras com o valor total de vendas por dia nos ultimos 30 dias" posicao="bottom">
-          <Card className="p-5 w-full">
-            <h3 className="text-lg font-semibold text-alisson-600 mb-4">Vendas - Ultimos 30 dias</h3>
+          <Card className="p-3 md:p-5 w-full">
+            <h3 className="text-base md:text-lg font-semibold text-alisson-600 mb-3 md:mb-4">Vendas - Ultimos 30 dias</h3>
             {vendasPeriodo.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={200} className="md:!h-[300px]">
                 <BarChart data={vendasPeriodo}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="data" tick={{ fontSize: 12 }} tickFormatter={(v) => v.slice(5)} />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `R$${v}`} />
+                  <XAxis dataKey="data" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
+                  <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `R$${v}`} width={50} />
                   <RechartsTooltip formatter={(v: number) => formatarMoeda(v)} labelFormatter={(l) => `Data: ${l}`} />
                   <Bar dataKey="valor" fill="#184036" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">Nenhuma venda no periodo</div>
+              <div className="h-[200px] md:h-[300px] flex items-center justify-center text-gray-400">Nenhuma venda no periodo</div>
             )}
           </Card>
         </Tooltip>
 
         <Tooltip texto="Distribuicao das vendas por categoria de produto (aliancas, aneis, colares, etc)" posicao="bottom">
-          <Card className="p-5 w-full">
-            <h3 className="text-lg font-semibold text-alisson-600 mb-4">Vendas por Categoria</h3>
+          <Card className="p-3 md:p-5 w-full">
+            <h3 className="text-base md:text-lg font-semibold text-alisson-600 mb-3 md:mb-4">Vendas por Categoria</h3>
             {vendasCategoria.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
+              <ResponsiveContainer width="100%" height={200} className="md:!h-[300px]">
                 <PieChart>
-                  <Pie data={vendasCategoria} dataKey="valor" nameKey="categoria" cx="50%" cy="50%" outerRadius={100} label={({ categoria, percent }) => `${categoria} (${(percent * 100).toFixed(0)}%)`}>
+                  <Pie data={vendasCategoria} dataKey="valor" nameKey="categoria" cx="50%" cy="50%" outerRadius={70} label={({ categoria, percent }) => `${categoria} (${(percent * 100).toFixed(0)}%)`} labelLine={{ strokeWidth: 1 }}>
                     {vendasCategoria.map((_, i) => (
                       <Cell key={i} fill={CORES_PIZZA[i % CORES_PIZZA.length]} />
                     ))}
@@ -115,27 +118,27 @@ export default function Dashboard() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="h-[300px] flex items-center justify-center text-gray-400">Sem dados de categoria</div>
+              <div className="h-[200px] md:h-[300px] flex items-center justify-center text-gray-400">Sem dados de categoria</div>
             )}
           </Card>
         </Tooltip>
       </div>
 
       {/* Pipeline + Top Products */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         <Tooltip texto="Quantidade de ODVs e valor total em cada estagio do funil de vendas" posicao="bottom">
-          <Card className="p-5 w-full">
-            <h3 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
-              <Kanban size={20} className="text-alisson-600" />
+          <Card className="p-3 md:p-5 w-full">
+            <h3 className="text-base md:text-lg font-semibold text-alisson-600 mb-3 md:mb-4 flex items-center gap-2">
+              <Kanban size={18} className="text-alisson-600" />
               Resumo do Pipeline
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-2 md:space-y-3">
               {resumo.pipeline.map((p) => (
-                <div key={p.estagio} className="flex items-center justify-between py-2 border-b border-gray-50">
-                  <span className="text-sm text-gray-700">{ESTAGIOS_LABEL[p.estagio] || p.estagio}</span>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm text-gray-500">{p.total} ODVs</span>
-                    <span className="text-sm font-medium text-alisson-600">{formatarMoeda(p.valor)}</span>
+                <div key={p.estagio} className="flex items-center justify-between py-1.5 md:py-2 border-b border-gray-50">
+                  <span className="text-xs md:text-sm text-gray-700">{ESTAGIOS_LABEL[p.estagio] || p.estagio}</span>
+                  <div className="flex items-center gap-2 md:gap-4">
+                    <span className="text-xs md:text-sm text-gray-500">{p.total} ODVs</span>
+                    <span className="text-xs md:text-sm font-medium text-alisson-600">{formatarMoeda(p.valor)}</span>
                   </div>
                 </div>
               ))}
@@ -144,22 +147,22 @@ export default function Dashboard() {
         </Tooltip>
 
         <Tooltip texto="Ranking dos produtos mais vendidos por quantidade e valor total" posicao="bottom">
-          <Card className="p-5 w-full">
-            <h3 className="text-lg font-semibold text-alisson-600 mb-4 flex items-center gap-2">
-              <ShoppingBag size={20} className="text-alisson-600" />
+          <Card className="p-3 md:p-5 w-full">
+            <h3 className="text-base md:text-lg font-semibold text-alisson-600 mb-3 md:mb-4 flex items-center gap-2">
+              <ShoppingBag size={18} className="text-alisson-600" />
               Top Produtos
             </h3>
             {topProdutos.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {topProdutos.map((p, i) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50">
-                    <div>
-                      <span className="text-sm font-medium text-alisson-600">{p.nome}</span>
-                      <span className="text-xs text-gray-400 ml-2">{p.categoria}</span>
+                  <div key={i} className="flex items-center justify-between py-1.5 md:py-2 border-b border-gray-50">
+                    <div className="min-w-0 flex-1">
+                      <span className="text-xs md:text-sm font-medium text-alisson-600">{p.nome}</span>
+                      <span className="text-[10px] md:text-xs text-gray-400 ml-1 md:ml-2">{p.categoria}</span>
                     </div>
-                    <div className="text-right">
-                      <span className="text-sm font-medium text-alisson-600">{p.vendas}x</span>
-                      <span className="text-xs text-gray-500 ml-2">{formatarMoeda(p.valor_total)}</span>
+                    <div className="text-right flex-shrink-0 ml-2">
+                      <span className="text-xs md:text-sm font-medium text-alisson-600">{p.vendas}x</span>
+                      <span className="text-[10px] md:text-xs text-gray-500 ml-1 md:ml-2">{formatarMoeda(p.valor_total)}</span>
                     </div>
                   </div>
                 ))}

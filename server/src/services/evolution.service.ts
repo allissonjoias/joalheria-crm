@@ -19,6 +19,7 @@ interface InstanceState {
   sock: ReturnType<typeof makeWASocket> | null;
   qr: string | null;
   connecting: boolean;
+  reconnectAttempts: number;
 }
 
 // Estado em memoria de cada instancia
@@ -55,7 +56,7 @@ export function resolveLid(lidId: string, instanceId?: string): string | null {
 
 function getState(instanceId: string): InstanceState {
   if (!instances.has(instanceId)) {
-    instances.set(instanceId, { sock: null, qr: null, connecting: false });
+    instances.set(instanceId, { sock: null, qr: null, connecting: false, reconnectAttempts: 0 });
   }
   return instances.get(instanceId)!;
 }
@@ -199,6 +200,7 @@ export class EvolutionService {
         if (connection === 'open') {
           state.connecting = false;
           state.qr = null;
+          state.reconnectAttempts = 0;
           this.updateInstanceStatus(capturedInstanceId, 'conectado');
           console.log(`[WA:${nomeInstancia}] Conectado!`);
         }
@@ -211,18 +213,41 @@ export class EvolutionService {
           const statusCode = (lastDisconnect?.error as any)?.output?.statusCode;
           const loggedOut = statusCode === DisconnectReason.loggedOut;
 
+          const errMsg = (lastDisconnect?.error as any)?.message || 'desconhecido';
+          console.log(`[WA:${nomeInstancia}] Desconectado - statusCode: ${statusCode}, motivo: ${errMsg}`);
+
           if (loggedOut) {
             this.updateInstanceStatus(capturedInstanceId, 'desconectado');
             console.log(`[WA:${nomeInstancia}] Deslogado pelo usuario`);
             if (fs.existsSync(authDir)) {
               fs.rmSync(authDir, { recursive: true, force: true });
             }
+          } else if (statusCode === 440) {
+            // Conflito: outra sessão ativa. Esperar mais tempo antes de reconectar
+            const tentativas = state.reconnectAttempts || 0;
+            state.reconnectAttempts = tentativas + 1;
+            if (tentativas >= 5) {
+              // Parar de tentar após 5 tentativas de conflito
+              this.updateInstanceStatus(capturedInstanceId, 'desconectado');
+              console.log(`[WA:${nomeInstancia}] Conflito persistente (outra sessao ativa). Desconectado. Remova sessoes duplicadas em Dispositivos Conectados no celular.`);
+            } else {
+              this.updateInstanceStatus(capturedInstanceId, 'conectando');
+              const delay = Math.min(15000 * Math.pow(2, tentativas), 120000);
+              console.log(`[WA:${nomeInstancia}] Conflito de sessao, reconectando em ${delay/1000}s... (tentativa ${tentativas + 1}/5)`);
+              setTimeout(() => {
+                this.conectar(capturedInstanceId).catch(console.error);
+              }, delay);
+            }
           } else {
-            this.updateInstanceStatus(capturedInstanceId, 'desconectado');
-            console.log(`[WA:${nomeInstancia}] Desconectado, reconectando em 5s...`);
+            this.updateInstanceStatus(capturedInstanceId, 'conectando');
+            // Backoff progressivo: 5s, 10s, 20s, max 60s
+            const tentativas = state.reconnectAttempts || 0;
+            state.reconnectAttempts = tentativas + 1;
+            const delay = Math.min(5000 * Math.pow(2, tentativas), 60000);
+            console.log(`[WA:${nomeInstancia}] Reconectando em ${delay/1000}s... (tentativa ${tentativas + 1})`);
             setTimeout(() => {
               this.conectar(capturedInstanceId).catch(console.error);
-            }, 5000);
+            }, delay);
           }
         }
       });
@@ -264,7 +289,10 @@ export class EvolutionService {
           const temMidia = !!(
             msg.message.imageMessage ||
             msg.message.audioMessage ||
-            msg.message.videoMessage
+            msg.message.videoMessage ||
+            msg.message.stickerMessage ||
+            msg.message.documentMessage ||
+            msg.message.documentWithCaptionMessage
           );
 
           // Pular se não tem texto NEM mídia
@@ -401,7 +429,7 @@ export class EvolutionService {
 
   async enviarMidia(
     telefone: string,
-    tipo: 'imagem' | 'audio' | 'video',
+    tipo: 'imagem' | 'audio' | 'video' | 'sticker' | 'documento',
     buffer: Buffer,
     mimetype: string,
     caption?: string,
@@ -418,7 +446,12 @@ export class EvolutionService {
       jid = `${numero}@s.whatsapp.net`;
     }
 
-    if (tipo === 'imagem') {
+    if (tipo === 'sticker') {
+      return await sock.sendMessage(jid, { sticker: buffer, mimetype });
+    } else if (tipo === 'documento') {
+      const ext = mimetype.split('/').pop() || 'file';
+      return await sock.sendMessage(jid, { document: buffer, mimetype, fileName: caption || `documento.${ext}` });
+    } else if (tipo === 'imagem') {
       return await sock.sendMessage(jid, { image: buffer, mimetype, caption });
     } else if (tipo === 'audio') {
       return await sock.sendMessage(jid, { audio: buffer, mimetype, ptt: true });

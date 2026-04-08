@@ -27,6 +27,9 @@ import distribuicaoRoutes from './routes/distribuicao.routes';
 import instagramRoutes from './routes/instagram.routes';
 import metaApiRoutes from './routes/meta-api.routes';
 import automacaoRoutes from './routes/automacao.routes';
+import configGeralRoutes from './routes/config-geral.routes';
+import manychatRoutes from './routes/manychat.routes';
+import brechasRoutes, { mercadoPagoWebhookRouter } from './routes/brechas.routes';
 import { WhatsAppController } from './controllers/whatsapp.controller';
 import { EvolutionService } from './services/evolution.service';
 import { sdrScheduler } from './services/sdr-scheduler.service';
@@ -73,6 +76,12 @@ app.use('/api/webhook', webhookRoutes);
 const whatsappCtrl = new WhatsAppController();
 app.post('/api/whatsapp/webhook/receive', (req, res) => whatsappCtrl.receberWebhook(req, res));
 
+// ManyChat webhook (publico) + config (protegido internamente no router)
+app.use('/api/manychat', manychatRoutes);
+
+// Mercado Pago webhook (publico - sem auth)
+app.use('/api/mercadopago', mercadoPagoWebhookRouter);
+
 // Instagram OAuth callback (publico - redirect do Facebook)
 app.use('/api/instagram', instagramRoutes);
 
@@ -101,6 +110,8 @@ app.use('/api/performance', authMiddleware, performanceRoutes);
 app.use('/api/distribuicao', authMiddleware, distribuicaoRoutes);
 app.use('/api/meta-api', authMiddleware, metaApiRoutes);
 app.use('/api/automacao', authMiddleware, automacaoRoutes);
+app.use('/api/config-geral', authMiddleware, configGeralRoutes);
+app.use('/api/brechas', authMiddleware, brechasRoutes);
 
 // Em producao, servir o frontend buildado
 if (process.env.NODE_ENV === 'production') {

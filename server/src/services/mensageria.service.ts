@@ -1,11 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
+import path from 'path';
 import { getDb } from '../config/database';
-import { ClaudeService, MensagemChat, BANTResult } from './claude.service';
+import { ClaudeService, MensagemChat, MensagemMultimodal, ContentBlock, BANTResult } from './claude.service';
 import { ExtracaoService } from './extracao.service';
 import { MetaService } from './meta.service';
 import { EvolutionService } from './evolution.service';
-import { mimetypeParaTipo } from './media.service';
+import { mimetypeParaTipo, extrairFrameVideo } from './media.service';
+import { agoraLocal } from '../utils/timezone';
 import {
   WhatsAppIncomingMessage,
   WhatsAppStatusUpdate,
@@ -15,6 +17,9 @@ import {
 import { SdrQualifierService } from './sdr-qualifier.service';
 import { InstagramService } from './instagram.service';
 import { markBotSent } from './whatsapp-queue.service';
+import { skillService } from './skill.service';
+import { getProdutosFormatados } from '../utils/prompt';
+import { brechasService } from './brechas.service';
 
 const claudeService = new ClaudeService();
 const extracaoService = new ExtracaoService();
@@ -24,6 +29,82 @@ const qualifierService = new SdrQualifierService();
 const instagramService = new InstagramService();
 
 type Canal = 'whatsapp' | 'instagram_dm' | 'instagram_comment' | 'interno';
+
+const UPLOADS_DIR = path.resolve(__dirname, '../../../uploads');
+
+// Monta mensagens multimodais com imagens/vídeos reais do disco
+async function montarMensagensComVisao(mensagensDb: any[]): Promise<MensagemMultimodal[]> {
+  const result: MensagemMultimodal[] = [];
+
+  for (const m of mensagensDb) {
+    const textoLimpo = limparConteudoParaIAStatic(m.conteudo);
+    const temImagem = (m.tipo_midia === 'imagem' || m.tipo_midia === 'sticker') && m.midia_url;
+    const temVideo = m.tipo_midia === 'video' && m.midia_url;
+
+    if (m.papel === 'user' && (temImagem || temVideo)) {
+      try {
+        const fileName = m.midia_url.replace('/uploads/', '');
+        const filePath = path.join(UPLOADS_DIR, fileName);
+        let buffer: Buffer | null = null;
+        let mediaType = 'image/jpeg';
+
+        if (temImagem && fs.existsSync(filePath)) {
+          buffer = fs.readFileSync(filePath);
+          const ext = path.extname(fileName).toLowerCase();
+          mediaType = ext === '.png' ? 'image/png'
+            : ext === '.webp' ? 'image/webp'
+            : ext === '.gif' ? 'image/gif'
+            : 'image/jpeg';
+        } else if (temVideo && fs.existsSync(filePath)) {
+          // Extrair frame do vídeo via ffmpeg
+          buffer = await extrairFrameVideo(filePath);
+          mediaType = 'image/jpeg';
+        }
+
+        if (buffer && buffer.length <= 2 * 1024 * 1024) {
+          const blocks: ContentBlock[] = [
+            { type: 'image', source: { type: 'base64', media_type: mediaType, data: buffer.toString('base64') } },
+          ];
+          const prompt = temVideo
+            ? 'O cliente enviou este vídeo. Esta é uma captura do vídeo. Descreva o que vê e responda de forma relevante.'
+            : 'O cliente enviou esta imagem. Descreva o que vê e responda de forma relevante.';
+          blocks.push({ type: 'text', text: textoLimpo && !textoLimpo.startsWith('[') ? textoLimpo : prompt });
+          result.push({ role: 'user', content: blocks });
+          continue;
+        }
+      } catch (e) {
+        // Fallback para texto
+      }
+    }
+
+    result.push({ role: m.papel, content: textoLimpo });
+  }
+
+  return result;
+}
+
+// Versão estática do limparConteudoParaIA (para usar fora da classe)
+function limparConteudoParaIAStatic(conteudo: string): string {
+  try {
+    if (conteudo?.startsWith('{') || conteudo?.startsWith('{\n')) {
+      const parsed = JSON.parse(conteudo);
+      if (parsed.resposta) return parsed.resposta;
+    }
+  } catch {}
+  const match = conteudo?.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (match) return match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+  return conteudo;
+}
+
+// Cache em memória para deduplicação de webhooks (evita race condition)
+const processandoMsgIds = new Set<string>();
+function marcarProcessando(msgId: string): boolean {
+  if (processandoMsgIds.has(msgId)) return false; // já está sendo processado
+  processandoMsgIds.add(msgId);
+  // Limpar após 30s para não crescer infinitamente
+  setTimeout(() => processandoMsgIds.delete(msgId), 30000);
+  return true;
+}
 
 export class MensageriaService {
   async processarWhatsApp(event: WhatsAppIncomingMessage): Promise<void> {
@@ -50,9 +131,9 @@ export class MensageriaService {
     // Save incoming message
     const msgId = uuidv4();
     db.prepare(
-      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, tipo_midia, midia_url)
-       VALUES (?, ?, 'user', ?, 'whatsapp', ?, 'entregue', ?, ?)`
-    ).run(msgId, conversaId, event.text || `[${tipoMidia}]`, event.messageId, tipoMidia, midiaUrl);
+      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, tipo_midia, midia_url, criado_em)
+       VALUES (?, ?, 'user', ?, 'whatsapp', ?, 'entregue', ?, ?, ?)`
+    ).run(msgId, conversaId, event.text || `[${tipoMidia}]`, event.messageId, tipoMidia, midiaUrl, agoraLocal());
 
     // Update conversation
     db.prepare(
@@ -82,22 +163,48 @@ export class MensageriaService {
   async processarInstagramDM(event: InstagramDMMessage, instagramContaId?: string): Promise<void> {
     const db = getDb();
 
-    // Deduplication
+    // Deduplication (cache em memória + banco)
+    if (!marcarProcessando(event.messageId)) return;
     const existente = db.prepare('SELECT id FROM mensagens WHERE meta_msg_id = ?').get(event.messageId);
     if (existente) return;
 
-    // Check if the message is from ourselves (page) - skip if so
+    // Check if the message is from ourselves (page/ig_user_id) - skip if so
     if (instagramContaId) {
       const conta = instagramService.obterConta(instagramContaId);
-      if (conta && event.senderId === conta.page_id) return;
+      if (conta && (event.senderId === conta.page_id || event.senderId === conta.ig_user_id)) return;
     } else {
       const config = await metaService.getConfig();
-      if (config && event.senderId === config.page_id) return;
+      if (config && (event.senderId === config.page_id || event.senderId === config.instagram_business_account_id)) return;
+    }
+
+    // Buscar username e foto do Instagram via Graph API
+    let nomeContato = `IG:${event.senderId}`;
+    let fotoPerfil: string | null = null;
+    if (instagramContaId) {
+      const conta = instagramService.obterConta(instagramContaId);
+      if (conta?.access_token) {
+        try {
+          const res = await fetch(`https://graph.facebook.com/v22.0/${event.senderId}?fields=name,username,profile_pic&access_token=${conta.access_token}`);
+          if (res.ok) {
+            const userData = await res.json() as any;
+            nomeContato = userData.username || userData.name || nomeContato;
+            fotoPerfil = userData.profile_pic || null;
+          }
+        } catch { /* fallback para ID */ }
+      }
     }
 
     const { conversaId, clienteId } = await this.encontrarOuCriarConversa(
-      'instagram_dm', event.senderId, `IG:${event.senderId}`
+      'instagram_dm', event.senderId, nomeContato
     );
+
+    // Salvar foto de perfil do Instagram no cliente (se disponivel)
+    if (fotoPerfil && clienteId) {
+      const clienteInfo = db.prepare('SELECT foto_perfil FROM clientes WHERE id = ?').get(clienteId) as any;
+      if (!clienteInfo?.foto_perfil) {
+        db.prepare('UPDATE clientes SET foto_perfil = ? WHERE id = ?').run(fotoPerfil, clienteId);
+      }
+    }
 
     // Salvar instagram_conta_id na conversa
     if (instagramContaId) {
@@ -115,9 +222,9 @@ export class MensageriaService {
 
     const msgId = uuidv4();
     db.prepare(
-      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, tipo_midia, midia_url)
-       VALUES (?, ?, 'user', ?, 'instagram_dm', ?, 'entregue', ?, ?)`
-    ).run(msgId, conversaId, event.text || `[${tipoMidia}]`, event.messageId, tipoMidia, midiaUrl);
+      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, tipo_midia, midia_url, criado_em)
+       VALUES (?, ?, 'user', ?, 'instagram_dm', ?, 'entregue', ?, ?, ?)`
+    ).run(msgId, conversaId, event.text || `[${tipoMidia}]`, event.messageId, tipoMidia, midiaUrl, agoraLocal());
 
     db.prepare(
       "UPDATE conversas SET ultimo_canal_msg_id = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
@@ -140,7 +247,8 @@ export class MensageriaService {
   async processarInstagramComment(event: InstagramCommentEvent, _instagramContaId?: string): Promise<void> {
     const db = getDb();
 
-    // Deduplication
+    // Deduplication (cache em memória + banco)
+    if (!marcarProcessando(event.commentId)) return;
     const existente = db.prepare('SELECT id FROM mensagens WHERE meta_msg_id = ?').get(event.commentId);
     if (existente) return;
 
@@ -160,9 +268,9 @@ export class MensageriaService {
 
     const msgId = uuidv4();
     db.prepare(
-      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, tipo_midia)
-       VALUES (?, ?, 'user', ?, 'instagram_comment', ?, 'entregue', 'comentario')`
-    ).run(msgId, conversaId, event.text, event.commentId);
+      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, tipo_midia, criado_em)
+       VALUES (?, ?, 'user', ?, 'instagram_comment', ?, 'entregue', 'comentario', ?)`
+    ).run(msgId, conversaId, event.text, event.commentId, agoraLocal());
 
     db.prepare(
       "UPDATE conversas SET ultimo_canal_msg_id = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
@@ -241,9 +349,9 @@ export class MensageriaService {
     const msgId = uuidv4();
     const metaMsgId = `out_${Date.now()}`;
     db.prepare(
-      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio)
-       VALUES (?, ?, 'assistant', ?, ?, ?, 'pendente')`
-    ).run(msgId, conversaId, respostaTexto, conversa.canal, metaMsgId);
+      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, meta_msg_id, status_envio, criado_em)
+       VALUES (?, ?, 'assistant', ?, ?, ?, 'pendente', ?)`
+    ).run(msgId, conversaId, respostaTexto, conversa.canal, metaMsgId, agoraLocal());
 
     db.prepare(
       "UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?"
@@ -263,15 +371,32 @@ export class MensageriaService {
             .run(sentMsgId, 'enviado', msgId);
         }
       } else if (conversa.canal === 'instagram_dm' && conversa.meta_contato_id) {
-        if (conversa.instagram_conta_id) {
-          await instagramService.enviarDM(conversa.instagram_conta_id, conversa.meta_contato_id, respostaTexto);
+        // Usar instagram_conta_id da conversa ou buscar conta ativa como fallback
+        let igContaId = conversa.instagram_conta_id;
+        if (!igContaId) {
+          const contas = instagramService.listarContas();
+          const contaAtiva = contas.find((c: any) => c.ativo);
+          igContaId = contaAtiva?.id;
+          // Atualizar conversa com a conta encontrada
+          if (igContaId) {
+            db.prepare('UPDATE conversas SET instagram_conta_id = ? WHERE id = ?').run(igContaId, conversaId);
+          }
+        }
+        if (igContaId) {
+          await instagramService.enviarDM(igContaId, conversa.meta_contato_id, respostaTexto);
         } else {
           await metaService.enviarInstagramDM(conversa.meta_contato_id, respostaTexto);
         }
         db.prepare('UPDATE mensagens SET status_envio = ? WHERE id = ?').run('enviado', msgId);
       } else if (conversa.canal === 'instagram_comment' && conversa.ultimo_canal_msg_id) {
-        if (conversa.instagram_conta_id) {
-          await instagramService.responderComentario(conversa.instagram_conta_id, conversa.ultimo_canal_msg_id, respostaTexto);
+        let igContaId = conversa.instagram_conta_id;
+        if (!igContaId) {
+          const contas = instagramService.listarContas();
+          const contaAtiva = contas.find((c: any) => c.ativo);
+          igContaId = contaAtiva?.id;
+        }
+        if (igContaId) {
+          await instagramService.responderComentario(igContaId, conversa.ultimo_canal_msg_id, respostaTexto);
         } else {
           await metaService.responderComentarioInstagram(conversa.ultimo_canal_msg_id, respostaTexto);
         }
@@ -336,9 +461,9 @@ export class MensageriaService {
     // Salvar mensagem no DB
     const msgId = uuidv4();
     db.prepare(
-      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, tipo_midia, midia_url)
-       VALUES (?, ?, 'assistant', ?, ?, 'pendente', ?, ?)`
-    ).run(msgId, conversaId, caption || `[${tipoMidia}]`, conversa.canal, tipoMidia, midiaUrl);
+      `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, tipo_midia, midia_url, criado_em)
+       VALUES (?, ?, 'assistant', ?, ?, 'pendente', ?, ?, ?)`
+    ).run(msgId, conversaId, caption || `[${tipoMidia}]`, conversa.canal, tipoMidia, midiaUrl, agoraLocal());
 
     db.prepare(
       "UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?"
@@ -609,23 +734,117 @@ export class MensageriaService {
   private async autoResponderIA(conversaId: string, clienteId: string, canal: Canal): Promise<void> {
     try {
       const db = getDb();
+
+      // MIDDLEWARE DE BRECHAS: verificar opt-out, problema, reengajamento ANTES da Luma
+      const ultimaMsgUser = db.prepare(
+        "SELECT conteudo FROM mensagens WHERE conversa_id = ? AND papel = 'user' ORDER BY criado_em DESC LIMIT 1"
+      ).get(conversaId) as any;
+
+      if (ultimaMsgUser?.conteudo) {
+        const brecha = brechasService.middlewareMensagemRecebida(clienteId, ultimaMsgUser.conteudo);
+        if (brecha && brecha.resposta_luma) {
+          // Brecha detectada: enviar resposta da brecha, NÃO da Luma
+          const msgId = uuidv4();
+          db.prepare(
+            `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, criado_em)
+             VALUES (?, ?, 'assistant', ?, ?, 'pendente', ?)`
+          ).run(msgId, conversaId, brecha.resposta_luma, canal, agoraLocal());
+
+          // Enviar pelo canal
+          const conversa = db.prepare('SELECT * FROM conversas WHERE id = ?').get(conversaId) as any;
+          try {
+            if (canal === 'whatsapp' && conversa.meta_contato_id) {
+              await metaService.enviarWhatsApp(conversa.meta_contato_id, brecha.resposta_luma);
+              db.prepare('UPDATE mensagens SET status_envio = ? WHERE id = ?').run('enviado', msgId);
+            } else if (canal === 'instagram_dm' && conversa.meta_contato_id) {
+              let igContaId = conversa.instagram_conta_id;
+              if (!igContaId) {
+                const contas = instagramService.listarContas();
+                const contaAtiva = contas.find((c: any) => c.ativo);
+                igContaId = contaAtiva?.id;
+              }
+              if (igContaId) {
+                await instagramService.enviarDM(igContaId, conversa.meta_contato_id, brecha.resposta_luma);
+              }
+              db.prepare('UPDATE mensagens SET status_envio = ? WHERE id = ?').run('enviado', msgId);
+            }
+          } catch (e) {
+            console.error('[BRECHAS] Erro ao enviar resposta de brecha:', e);
+            db.prepare('UPDATE mensagens SET status_envio = ? WHERE id = ?').run('falhou', msgId);
+          }
+
+          console.log(`[BRECHAS] Brecha "${brecha.acao}" detectada para cliente ${clienteId}`);
+          return; // Não continuar com Luma
+        }
+      }
+
       const mensagensDb = db.prepare(
-        'SELECT papel, conteudo FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC'
+        'SELECT papel, conteudo, tipo_midia, midia_url FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC'
       ).all(conversaId) as any[];
 
-      const historico: MensagemChat[] = mensagensDb.map(m => ({
+      // Limitar histórico: últimas 15 mensagens para economizar tokens
+      const ultimas = mensagensDb.slice(-15);
+      const historico: MensagemChat[] = ultimas.map(m => ({
         role: m.papel as 'user' | 'assistant',
-        content: m.conteudo,
+        content: this.limparConteudoParaIA(m.conteudo),
       }));
 
-      const resposta = await claudeService.enviarMensagem(historico);
+      // Verificar se há imagens ou vídeos recentes para usar Vision
+      const temImagemRecente = ultimas.some(m =>
+        m.papel === 'user' && (m.tipo_midia === 'imagem' || m.tipo_midia === 'sticker' || m.tipo_midia === 'video') && m.midia_url
+      );
+
+      // Tentar usar sistema multi-agente com skills (mais eficiente em tokens)
+      let resposta: string;
+      const agenteAtivo = db.prepare(
+        "SELECT id FROM agentes_ia WHERE ativo = 1 ORDER BY id ASC LIMIT 1"
+      ).get() as any;
+
+      if (agenteAtivo && skillService.isMultiAgente(agenteAtivo.id)) {
+        const ultimaMsg = historico[historico.length - 1]?.content || '';
+        // Buscar dados do cliente para contexto
+        const cliente = db.prepare('SELECT * FROM clientes WHERE id = ?').get(clienteId) as any;
+        const contextoLead = cliente
+          ? `[CONTEXTO] Nome: ${cliente.nome || 'desconhecido'}, Tel: ${cliente.telefone || '-'}`
+          : '[CONTEXTO] Novo lead';
+        const produtos = getProdutosFormatados();
+
+        // Chamada 1: Router (50 tokens) - decide sub-agente
+        const subAgente = await skillService.routeMessage(agenteAtivo.id, ultimaMsg, contextoLead, historico.slice(-4));
+
+        // Chamada 2: Sub-agente gera resposta (com visão se houver imagens)
+        if (temImagemRecente) {
+          const mensagensVision = await montarMensagensComVisao(ultimas.slice(-8));
+          const subPrompt = skillService.getSubAgentePrompt(agenteAtivo.id, subAgente);
+          const systemPrompt = subPrompt
+            ? subPrompt.replace('{{PRODUTOS}}', produtos)
+            : `Voce e uma consultora de joalheria premium. Produtos:\n${produtos}`;
+          const respostaRaw = await claudeService.enviarMensagemComVisao(
+            `${systemPrompt}\n\n${contextoLead}`,
+            mensagensVision, 1024
+          );
+          resposta = this.extrairRespostaTexto(respostaRaw);
+        } else {
+          const respostaRaw = await skillService.gerarResposta(agenteAtivo.id, subAgente, historico.slice(-8), contextoLead, produtos);
+          resposta = this.extrairRespostaTexto(respostaRaw);
+        }
+      } else if (temImagemRecente) {
+        // Sem multi-agente mas com imagens: usar Vision
+        const { getSystemPrompt } = require('../utils/prompt');
+        const mensagensVision = await montarMensagensComVisao(ultimas);
+        const respostaRaw = await claudeService.enviarMensagemComVisao(getSystemPrompt(), mensagensVision, 1024);
+        resposta = this.extrairRespostaTexto(respostaRaw);
+      } else {
+        const respostaRaw = await claudeService.enviarMensagem(historico);
+        resposta = this.extrairRespostaTexto(respostaRaw);
+      }
 
       // Save agent response
       const msgId = uuidv4();
       db.prepare(
-        `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio)
-         VALUES (?, ?, 'assistant', ?, ?, 'pendente')`
-      ).run(msgId, conversaId, resposta, canal);
+        `INSERT INTO mensagens (id, conversa_id, papel, conteudo, canal_origem, status_envio, criado_em)
+         VALUES (?, ?, 'assistant', ?, ?, 'pendente', ?)`
+      ).run(msgId, conversaId, resposta, canal, agoraLocal());
 
       db.prepare(
         "UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?"
@@ -642,15 +861,30 @@ export class MensageriaService {
               .run(sentMsgId, 'enviado', msgId);
           }
         } else if (canal === 'instagram_dm' && conversa.meta_contato_id) {
-          if (conversa.instagram_conta_id) {
-            await instagramService.enviarDM(conversa.instagram_conta_id, conversa.meta_contato_id, resposta);
+          let igContaId = conversa.instagram_conta_id;
+          if (!igContaId) {
+            const contas = instagramService.listarContas();
+            const contaAtiva = contas.find((c: any) => c.ativo);
+            igContaId = contaAtiva?.id;
+            if (igContaId) {
+              db.prepare('UPDATE conversas SET instagram_conta_id = ? WHERE id = ?').run(igContaId, conversaId);
+            }
+          }
+          if (igContaId) {
+            await instagramService.enviarDM(igContaId, conversa.meta_contato_id, resposta);
           } else {
             await metaService.enviarInstagramDM(conversa.meta_contato_id, resposta);
           }
           db.prepare('UPDATE mensagens SET status_envio = ? WHERE id = ?').run('enviado', msgId);
         } else if (canal === 'instagram_comment' && conversa.ultimo_canal_msg_id) {
-          if (conversa.instagram_conta_id) {
-            await instagramService.responderComentario(conversa.instagram_conta_id, conversa.ultimo_canal_msg_id, resposta);
+          let igContaId = conversa.instagram_conta_id;
+          if (!igContaId) {
+            const contas = instagramService.listarContas();
+            const contaAtiva = contas.find((c: any) => c.ativo);
+            igContaId = contaAtiva?.id;
+          }
+          if (igContaId) {
+            await instagramService.responderComentario(igContaId, conversa.ultimo_canal_msg_id, resposta);
           } else {
             await metaService.responderComentarioInstagram(conversa.ultimo_canal_msg_id, resposta);
           }
@@ -661,34 +895,87 @@ export class MensageriaService {
         db.prepare('UPDATE mensagens SET status_envio = ? WHERE id = ?').run('falhou', msgId);
       }
 
-      // Extract data + BANT
-      const allMsgs = db.prepare(
-        'SELECT papel, conteudo FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC'
-      ).all(conversaId) as any[];
-      const hist: MensagemChat[] = allMsgs.map(m => ({
-        role: m.papel as 'user' | 'assistant',
-        content: m.conteudo,
-      }));
+      // Extract data + BANT (pular para comentários do Instagram - são muito curtos)
+      if (canal !== 'instagram_comment') {
+        // Só extrair dados a cada 3 mensagens do user para economizar API
+        const totalUser = db.prepare(
+          "SELECT COUNT(*) as c FROM mensagens WHERE conversa_id = ? AND papel = 'user'"
+        ).get(conversaId) as any;
+        const deveFazerExtracao = (totalUser?.c || 0) % 3 === 0 || (totalUser?.c || 0) <= 2;
 
-      try {
-        const dados = await claudeService.extrairDados(hist);
-        if (dados) {
-          db.prepare('UPDATE mensagens SET dados_extraidos = ? WHERE id = ?')
-            .run(JSON.stringify(dados), msgId);
-          extracaoService.atualizarCliente(clienteId, dados);
-          // Auto-preencher ODV no pipeline com dados da conversa
-          extracaoService.atualizarOdv(clienteId, dados, conversaId);
+        if (deveFazerExtracao) {
+          const allMsgs = db.prepare(
+            'SELECT papel, conteudo FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC'
+          ).all(conversaId) as any[];
+          const hist: MensagemChat[] = allMsgs.map(m => ({
+            role: m.papel as 'user' | 'assistant',
+            content: m.conteudo,
+          }));
+
+          try {
+            const dados = await claudeService.extrairDados(hist);
+            if (dados) {
+              db.prepare('UPDATE mensagens SET dados_extraidos = ? WHERE id = ?')
+                .run(JSON.stringify(dados), msgId);
+              extracaoService.atualizarCliente(clienteId, dados);
+              extracaoService.atualizarOdv(clienteId, dados, conversaId);
+            }
+          } catch (e) {
+            console.error('Erro na extração auto:', e);
+          }
+
+          // BANT junto com extração
+          this.processarBANT(conversaId, clienteId, hist).catch(e =>
+            console.error('Erro BANT auto:', e)
+          );
         }
-      } catch (e) {
-        console.error('Erro na extração auto:', e);
       }
-
-      // Processar BANT (em paralelo com extração, não bloqueia)
-      this.processarBANT(conversaId, clienteId, hist).catch(e =>
-        console.error('Erro BANT auto:', e)
-      );
     } catch (e) {
       console.error('Erro na auto-resposta IA:', e);
     }
+  }
+
+  // Extrai apenas o texto de resposta se a IA retornou JSON
+  private extrairRespostaTexto(resposta: string): string {
+    // Tentar parse direto primeiro
+    try {
+      const parsed = JSON.parse(resposta.trim());
+      if (parsed.resposta) return parsed.resposta;
+    } catch {}
+
+    // Tentar encontrar primeiro objeto JSON válido (non-greedy)
+    try {
+      const jsonMatch = resposta.match(/\{[^{}]*"resposta"\s*:\s*"[^"]*"[^{}]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.resposta) return parsed.resposta;
+      }
+    } catch {}
+
+    // Fallback: extrair valor de "resposta" por regex direto
+    const respostaMatch = resposta.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (respostaMatch) {
+      return respostaMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    }
+
+    // Limpar aspas e chaves residuais se nenhum JSON válido
+    let limpo = resposta.replace(/^\s*\{?\s*"resposta"\s*:\s*"?/i, '').replace(/"?\s*,?\s*"nome_lead"[\s\S]*$/i, '').replace(/"\s*\}\s*$/,'');
+    if (limpo !== resposta && limpo.length > 10) return limpo;
+
+    return resposta;
+  }
+
+  // Limpa conteúdo JSON salvo anteriormente para não poluir o histórico da IA
+  private limparConteudoParaIA(conteudo: string): string {
+    try {
+      if (conteudo.startsWith('{') || conteudo.startsWith('{\n')) {
+        const parsed = JSON.parse(conteudo);
+        if (parsed.resposta) return parsed.resposta;
+      }
+    } catch {}
+    // Fallback regex para JSON malformado
+    const match = conteudo.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (match) return match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    return conteudo;
   }
 }

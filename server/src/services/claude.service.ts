@@ -17,6 +17,22 @@ export interface MensagemChat {
   content: string;
 }
 
+// Bloco de conteudo multimodal (texto + imagem) para Claude Vision
+export interface ContentBlock {
+  type: 'text' | 'image';
+  text?: string;
+  source?: {
+    type: 'base64';
+    media_type: string;
+    data: string;
+  };
+}
+
+export interface MensagemMultimodal {
+  role: 'user' | 'assistant';
+  content: string | ContentBlock[];
+}
+
 type Provider = 'anthropic' | 'openai' | 'gemini';
 
 interface ProviderConfig {
@@ -68,7 +84,7 @@ function getActiveProvider(): ProviderConfig {
 }
 
 // --- Anthropic ---
-async function callAnthropic(config: ProviderConfig, system: string, messages: MensagemChat[], maxTokens: number): Promise<string> {
+async function callAnthropic(config: ProviderConfig, system: string, messages: MensagemChat[], maxTokens: number, temperature?: number): Promise<string> {
   if (!anthropicClient || config.api_key !== lastAnthropicKey) {
     anthropicClient = new Anthropic({ apiKey: config.api_key });
     lastAnthropicKey = config.api_key;
@@ -79,14 +95,34 @@ async function callAnthropic(config: ProviderConfig, system: string, messages: M
     max_tokens: maxTokens,
     system,
     messages,
+    ...(temperature !== undefined ? { temperature } : {}),
   });
 
   const textBlock = response.content.find(b => b.type === 'text');
   return textBlock ? textBlock.text : '';
 }
 
+// --- Anthropic com Vision (multimodal) ---
+async function callAnthropicVision(config: ProviderConfig, system: string, messages: MensagemMultimodal[], maxTokens: number, temperature?: number): Promise<string> {
+  if (!anthropicClient || config.api_key !== lastAnthropicKey) {
+    anthropicClient = new Anthropic({ apiKey: config.api_key });
+    lastAnthropicKey = config.api_key;
+  }
+
+  const response = await anthropicClient.messages.create({
+    model: config.modelo || 'claude-sonnet-4-6',
+    max_tokens: maxTokens,
+    system,
+    messages: messages as any,
+    ...(temperature !== undefined ? { temperature } : {}),
+  });
+
+  const textBlock = response.content.find(b => b.type === 'text');
+  return textBlock ? (textBlock as any).text : '';
+}
+
 // --- OpenAI ---
-async function callOpenAI(config: ProviderConfig, system: string, messages: MensagemChat[], maxTokens: number): Promise<string> {
+async function callOpenAI(config: ProviderConfig, system: string, messages: MensagemChat[], maxTokens: number, temperature?: number): Promise<string> {
   const apiMessages = [
     { role: 'system' as const, content: system },
     ...messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
@@ -102,6 +138,7 @@ async function callOpenAI(config: ProviderConfig, system: string, messages: Mens
       model: config.modelo || 'gpt-4o',
       messages: apiMessages,
       max_tokens: maxTokens,
+      ...(temperature !== undefined ? { temperature } : {}),
     }),
   });
 
@@ -115,7 +152,7 @@ async function callOpenAI(config: ProviderConfig, system: string, messages: Mens
 }
 
 // --- Gemini ---
-async function callGemini(config: ProviderConfig, system: string, messages: MensagemChat[], maxTokens: number): Promise<string> {
+async function callGemini(config: ProviderConfig, system: string, messages: MensagemChat[], maxTokens: number, temperature?: number): Promise<string> {
   const modelo = config.modelo || 'gemini-2.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${config.api_key}`;
 
@@ -153,6 +190,7 @@ async function callGemini(config: ProviderConfig, system: string, messages: Mens
     ...(system.trim() ? { systemInstruction: { parts: [{ text: system }] } } : {}),
     generationConfig: {
       maxOutputTokens: maxTokens,
+      ...(temperature !== undefined ? { temperature } : {}),
       // Desabilitar thinking no gemini-2.5 para nao consumir tokens de raciocinio
       ...(modelo.includes('2.5') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
     },
@@ -174,16 +212,16 @@ async function callGemini(config: ProviderConfig, system: string, messages: Mens
 }
 
 // --- Unified call ---
-async function callAI(system: string, messages: MensagemChat[], maxTokens: number = 1024): Promise<string> {
+async function callAI(system: string, messages: MensagemChat[], maxTokens: number = 1024, temperature?: number): Promise<string> {
   const config = getActiveProvider();
 
   switch (config.provider) {
     case 'anthropic':
-      return callAnthropic(config, system, messages, maxTokens);
+      return callAnthropic(config, system, messages, maxTokens, temperature);
     case 'openai':
-      return callOpenAI(config, system, messages, maxTokens);
+      return callOpenAI(config, system, messages, maxTokens, temperature);
     case 'gemini':
-      return callGemini(config, system, messages, maxTokens);
+      return callGemini(config, system, messages, maxTokens, temperature);
     default:
       throw new Error(`Provedor desconhecido: ${config.provider}`);
   }
@@ -193,7 +231,36 @@ async function callAI(system: string, messages: MensagemChat[], maxTokens: numbe
 export class ClaudeService {
   async enviarMensagem(historico: MensagemChat[]): Promise<string> {
     const systemPrompt = getSystemPrompt();
-    return callAI(systemPrompt, historico, 1024);
+    // Limpar histórico: extrair apenas "resposta" de mensagens JSON antigas
+    const historicoLimpo = historico.map(m => ({
+      ...m,
+      content: this.limparConteudo(m.content),
+    }));
+    const respostaRaw = await callAI(systemPrompt, historicoLimpo, 1024);
+    return this.extrairResposta(respostaRaw);
+  }
+
+  // Extrai campo "resposta" de JSON, retorna texto puro
+  private extrairResposta(texto: string): string {
+    try {
+      const jsonMatch = texto.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.resposta) return parsed.resposta;
+      }
+    } catch {}
+    return texto;
+  }
+
+  // Limpa conteúdo JSON salvo anteriormente no histórico
+  private limparConteudo(conteudo: string): string {
+    try {
+      if (conteudo.trimStart().startsWith('{')) {
+        const parsed = JSON.parse(conteudo);
+        if (parsed.resposta) return parsed.resposta;
+      }
+    } catch {}
+    return conteudo;
   }
 
   async consultarDara(historico: MensagemChat[]): Promise<string> {
@@ -266,10 +333,10 @@ ${conversaTexto}`,
     }
   }
 
-  async enviarMensagemSDR(contexto: SdrRespostaContexto, historico: MensagemChat[]): Promise<{ resposta: string; dados_extraidos: any } | null> {
+  async enviarMensagemSDR(contexto: SdrRespostaContexto, historico: MensagemChat[], maxTokens?: number, temperature?: number): Promise<{ resposta: string; dados_extraidos: any } | null> {
     const systemPrompt = getSdrRespostaPrompt(contexto);
     try {
-      const respostaRaw = await callAI(systemPrompt, historico, 500);
+      const respostaRaw = await callAI(systemPrompt, historico, maxTokens || 500, temperature);
 
       // Tentar parsear JSON da resposta
       const jsonMatch = respostaRaw.match(/\{[\s\S]*\}/);
@@ -296,8 +363,25 @@ ${conversaTexto}`,
     return callAI('', [{ role: 'user', content: conteudo }], maxTokens);
   }
 
-  async simularDara(systemPrompt: string, historico: MensagemChat[], maxTokens: number): Promise<string> {
-    return callAI(systemPrompt, historico, maxTokens);
+  async simularDara(systemPrompt: string, historico: MensagemChat[], maxTokens: number, temperature?: number): Promise<string> {
+    return callAI(systemPrompt, historico, maxTokens, temperature);
+  }
+
+  /**
+   * Enviar mensagem com suporte a visão (imagens inline).
+   * Usa Claude Vision para analisar imagens enviadas pelo cliente.
+   */
+  async enviarMensagemComVisao(systemPrompt: string, messages: MensagemMultimodal[], maxTokens: number = 1024, temperature?: number): Promise<string> {
+    const config = getActiveProvider();
+    if (config.provider === 'anthropic') {
+      return callAnthropicVision(config, systemPrompt, messages, maxTokens, temperature);
+    }
+    // Fallback: converter para texto puro para outros provedores
+    const textMessages: MensagemChat[] = messages.map(m => ({
+      role: m.role,
+      content: typeof m.content === 'string' ? m.content : m.content.filter(b => b.type === 'text').map(b => b.text || '').join('\n'),
+    }));
+    return callAI(systemPrompt, textMessages, maxTokens, temperature);
   }
 
   async scoringAtendimento(historico: MensagemChat[]): Promise<{

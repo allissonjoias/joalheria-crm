@@ -1,7 +1,7 @@
 import { getDb } from '../config/database';
 import { env } from '../config/env';
 
-const GRAPH_API_BASE = 'https://graph.facebook.com/v21.0';
+const GRAPH_API_BASE = 'https://graph.facebook.com/v22.0';
 
 interface MetaConfig {
   id: string;

@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Bot, Plus, Send, RotateCcw, Trash2, Save, Image, Settings,
-  ChevronDown, ChevronUp, ArrowLeft, Loader2, Pencil, Copy, Wand2, X, Check,
-  Search, AlertTriangle, CheckCircle, XCircle, ArrowRight,
+  ChevronDown, ChevronUp, ArrowLeft, Loader2, Pencil, X,
   Paperclip, Camera, Video, Mic, FileText, Play, Pause, Download,
-  Target, RefreshCw, Flame, ThermometerSun, Snowflake, List,
+  Target, Flame, ThermometerSun, Snowflake, List,
+  Brain, Zap,
 } from 'lucide-react';
 import api from '../services/api';
+import { SkillsPanel } from '../components/agentes/SkillsPanel';
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -14,9 +15,11 @@ interface Agente {
   id: number;
   nome: string;
   area: string;
-  prompt_sistema: string;
+  prompt_sistema?: string;
   foto_url: string | null;
   ativo: number;
+  max_tokens?: number;
+  temperatura?: number;
 }
 
 type TipoMidia = 'imagem' | 'video' | 'audio' | 'documento';
@@ -247,12 +250,12 @@ export default function AgentesIA() {
   return (
     <div className="h-full flex flex-col">
       {/* Header com abas */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Bot className="text-alisson-500" size={24} />
+      <div className="flex items-center justify-between mb-3 md:mb-4">
+        <div className="flex items-center gap-2 md:gap-3">
+          <Bot className="text-alisson-500" size={20} />
           <div>
-            <h1 className="text-xl font-bold text-gray-800">Agentes de AI</h1>
-            <p className="text-xs text-gray-500">Crie e gerencie seus agentes inteligentes</p>
+            <h1 className="text-lg md:text-xl font-bold text-gray-800">Agentes IA</h1>
+            <p className="text-[10px] md:text-xs text-gray-500 hidden sm:block">Arquitetura Multi-Agente com Skills Inteligentes</p>
           </div>
         </div>
         {abaGlobal === 'agentes' && (
@@ -331,9 +334,16 @@ export default function AgentesIA() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-gray-400 mb-4 line-clamp-2">
-                    {ag.prompt_sistema ? ag.prompt_sistema.substring(0, 120) + '...' : 'Sem prompt configurado'}
-                  </p>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-50 text-violet-600 text-xs font-medium">
+                      <Brain size={12} />
+                      Multi-Agente
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-50 text-gray-500 text-xs">
+                      <Zap size={12} />
+                      Skills
+                    </span>
+                  </div>
 
                   <div className="flex gap-2">
                     <button
@@ -382,11 +392,11 @@ export default function AgentesIA() {
 function FormAgente({ agente, onVoltar, onSalvo }: { agente: Agente | null; onVoltar: () => void; onSalvo: () => void }) {
   const [nome, setNome] = useState(agente?.nome || '');
   const [area, setArea] = useState(agente?.area || 'sdr');
-  const [promptSistema, setPromptSistema] = useState(agente?.prompt_sistema || '');
+  const [maxTokens, setMaxTokens] = useState(agente?.max_tokens ?? 500);
+  const [temperatura, setTemperatura] = useState(agente?.temperatura ?? 0.7);
   const [fotoPreview, setFotoPreview] = useState<string | null>(agente?.foto_url || null);
   const [fotoBase64, setFotoBase64] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
-  const [mostrarPrompt, setMostrarPrompt] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -407,9 +417,9 @@ function FormAgente({ agente, onVoltar, onSalvo }: { agente: Agente | null; onVo
     try {
       let id = agente?.id;
       if (agente) {
-        await api.put(`/agentes-ia/${agente.id}`, { nome, area, prompt_sistema: promptSistema });
+        await api.put(`/agentes-ia/${agente.id}`, { nome, area, max_tokens: maxTokens, temperatura });
       } else {
-        const { data } = await api.post('/agentes-ia', { nome, area, prompt_sistema: promptSistema });
+        const { data } = await api.post('/agentes-ia', { nome, area, max_tokens: maxTokens, temperatura });
         id = data.id;
       }
 
@@ -434,7 +444,7 @@ function FormAgente({ agente, onVoltar, onSalvo }: { agente: Agente | null; onVo
         </button>
         <div>
           <h1 className="text-xl font-bold text-gray-800">{agente ? 'Editar Agente' : 'Novo Agente'}</h1>
-          <p className="text-xs text-gray-500">Configure o nome, area de atuacao e prompt do agente</p>
+          <p className="text-xs text-gray-500">Configure o agente e suas skills multi-agente</p>
         </div>
         <button
           onClick={salvar}
@@ -504,29 +514,71 @@ function FormAgente({ agente, onVoltar, onSalvo }: { agente: Agente | null; onVo
               ))}
             </div>
           </div>
+
+          {/* Configuracao de IA */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Configuracao da IA</label>
+
+            {/* Max Tokens */}
+            <div className="mb-4">
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs text-gray-600">Max Tokens (resposta)</span>
+                <span className="text-xs font-bold text-alisson-600">{maxTokens}</span>
+              </div>
+              <input
+                type="range"
+                min={100}
+                max={2000}
+                step={50}
+                value={maxTokens}
+                onChange={e => setMaxTokens(Number(e.target.value))}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-alisson-500"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                <span>100 (rapida)</span>
+                <span>2000 (detalhada)</span>
+              </div>
+            </div>
+
+            {/* Temperatura */}
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs text-gray-600">Temperatura (criatividade)</span>
+                <span className="text-xs font-bold text-alisson-600">{temperatura.toFixed(1)}</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={temperatura}
+                onChange={e => setTemperatura(Number(e.target.value))}
+                className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-alisson-500"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+                <span>0.0 (precisa)</span>
+                <span>1.0 (criativa)</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Coluna direita: prompt */}
+        {/* Coluna direita: Skills (cerebro do agente) */}
         <div className="flex-1 flex flex-col bg-white rounded-xl border border-gray-200 overflow-hidden min-h-0">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
-            <button
-              onClick={() => setMostrarPrompt(!mostrarPrompt)}
-              className="flex items-center gap-2"
-            >
+          <div className="px-5 py-3 border-b border-gray-100 flex-shrink-0">
+            <h2 className="font-semibold text-alisson-600 text-sm flex items-center gap-2">
               <Settings size={16} className="text-alisson-500" />
-              <span className="font-semibold text-alisson-600 text-sm">Prompt do Sistema</span>
-              {mostrarPrompt ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-            </button>
-            <span className="text-xs text-gray-400">{promptSistema.length} caracteres</span>
+              Cerebro do Agente - Multi-Agente
+            </h2>
+            <p className="text-[10px] text-gray-400 mt-0.5">Agente mestre + sub-agentes especializados</p>
           </div>
-          {mostrarPrompt && (
-            <textarea
-              value={promptSistema}
-              onChange={e => setPromptSistema(e.target.value)}
-              className="flex-1 p-4 text-sm font-mono resize-none focus:outline-none leading-relaxed"
-              placeholder="Cole ou escreva o prompt do sistema aqui. Este prompt define a personalidade, regras e comportamento do agente..."
-            />
-          )}
+          <div className="flex-1 overflow-y-auto p-4">
+            {agente?.id ? (
+              <SkillsPanel agentId={agente.id} />
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-8">Salve o agente primeiro para configurar as skills</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -740,27 +792,14 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
   const [estado, setEstado] = useState<EstadoLead>({ ...ESTADO_INICIAL });
   const [jsonBruto, setJsonBruto] = useState<any>(null);
   const [mostrarJson, setMostrarJson] = useState(false);
-  const [mostrarPrompt, setMostrarPrompt] = useState(false);
   const [mostrarBant, setMostrarBant] = useState(true);
   const [apiMsgs, setApiMsgs] = useState<{ role: string; content: string }[]>([]);
-  const [modalMelhoria, setModalMelhoria] = useState(false);
-  const [feedbackMelhoria, setFeedbackMelhoria] = useState('');
-  const [melhorando, setMelhorando] = useState(false);
-  const [melhoriaAplicada, setMelhoriaAplicada] = useState<string | null>(null);
-  const [etapaMelhoria, setEtapaMelhoria] = useState<'input' | 'analise' | 'aplicado'>('input');
-  const [analiseMelhoria, setAnaliseMelhoria] = useState<any>(null);
-  const [promptProposto, setPromptProposto] = useState<string>('');
-  const [aplicando, setAplicando] = useState(false);
-  const [modalAnalise, setModalAnalise] = useState(false);
-  const [analisando, setAnalisando] = useState(false);
-  const [analisePrompt, setAnalisePrompt] = useState<any>(null);
   const [menuAnexo, setMenuAnexo] = useState(false);
   const [gravandoAudio, setGravandoAudio] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [uploadando, setUploadando] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const feedbackRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const menuAnexoRef = useRef<HTMLDivElement>(null);
 
@@ -887,7 +926,13 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
 
     const contexto = buildContexto(estado, mensagens);
     const conteudoUser = `${contexto}\n\n${textoParaIA}`;
-    const novasApiMsgs = [...apiMsgs, { role: 'user', content: conteudoUser }];
+    const msgObj: any = { role: 'user', content: conteudoUser };
+    // Enviar URL da mídia para o backend poder usar Vision
+    if ((midia.tipo === 'imagem' || midia.tipo === 'video') && midia.url) {
+      msgObj.midia_url = midia.url;
+      msgObj.tipo_midia = midia.tipo;
+    }
+    const novasApiMsgs = [...apiMsgs, msgObj];
 
     try {
       const { data } = await api.post(`/agentes-ia/${agente.id}/simular`, {
@@ -1009,76 +1054,6 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
     setEstado({ ...ESTADO_INICIAL });
     setJsonBruto(null);
     setMostrarJson(false);
-    setMostrarPrompt(false);
-  };
-
-  const abrirMelhoria = () => {
-    setFeedbackMelhoria('');
-    setMelhoriaAplicada(null);
-    setEtapaMelhoria('input');
-    setAnaliseMelhoria(null);
-    setPromptProposto('');
-    setModalMelhoria(true);
-    setTimeout(() => feedbackRef.current?.focus(), 100);
-  };
-
-  // Etapa 1: Envia feedback e recebe analise + prompt proposto (SEM salvar)
-  const enviarMelhoria = async () => {
-    if (!feedbackMelhoria.trim() || melhorando) return;
-    setMelhorando(true);
-    try {
-      const { data } = await api.post(`/agentes-ia/${agente.id}/melhorar-prompt`, {
-        feedback: feedbackMelhoria.trim(),
-        historico_conversa: mensagens.map(m => ({ papel: m.papel, texto: m.texto })),
-      });
-      setAnaliseMelhoria(data.analise);
-      setPromptProposto(data.prompt_melhorado);
-      setEtapaMelhoria('analise');
-    } catch (e: any) {
-      alert('Erro ao analisar: ' + (e.response?.data?.erro || e.message));
-    } finally {
-      setMelhorando(false);
-    }
-  };
-
-  // Etapa 2: Aprovar e salvar o prompt proposto
-  const aprovarMelhoria = async () => {
-    if (!promptProposto || aplicando) return;
-    setAplicando(true);
-    try {
-      await api.post(`/agentes-ia/${agente.id}/aplicar-melhoria`, {
-        prompt_melhorado: promptProposto,
-      });
-      setMelhoriaAplicada(promptProposto);
-      setAgente(prev => ({ ...prev, prompt_sistema: promptProposto }));
-      setEtapaMelhoria('aplicado');
-    } catch (e: any) {
-      alert('Erro ao aplicar: ' + (e.response?.data?.erro || e.message));
-    } finally {
-      setAplicando(false);
-    }
-  };
-
-  // Rejeitar: volta pra etapa de input
-  const rejeitarMelhoria = () => {
-    setEtapaMelhoria('input');
-    setAnaliseMelhoria(null);
-    setPromptProposto('');
-  };
-
-  // Analisar prompt standalone (erros, incoerencias, duplicatas)
-  const abrirAnalise = async () => {
-    setAnalisePrompt(null);
-    setModalAnalise(true);
-    setAnalisando(true);
-    try {
-      const { data } = await api.post(`/agentes-ia/${agente.id}/analisar-prompt`);
-      setAnalisePrompt(data.analise);
-    } catch (e: any) {
-      setAnalisePrompt({ nota_geral: 'Erro ao analisar: ' + (e.response?.data?.erro || e.message), erros: [], incoerencias: [], duplicatas: [], melhorias_sugeridas: [], score_qualidade: 0 });
-    } finally {
-      setAnalisando(false);
-    }
   };
 
   const bantCompleto = [
@@ -1138,14 +1113,10 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
               </div>
             </div>
             <div className="flex gap-2">
-              <button
-                onClick={() => setMostrarPrompt(!mostrarPrompt)}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
-                  mostrarPrompt ? 'bg-white/20 text-white' : 'text-alisson-200 hover:text-white'
-                }`}
-              >
-                PROMPT
-              </button>
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded bg-violet-400/20 text-violet-200 text-xs font-semibold">
+                <Brain size={12} />
+                Multi-Agente
+              </span>
               <button
                 onClick={() => setMostrarJson(!mostrarJson)}
                 className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
@@ -1153,25 +1124,6 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
                 }`}
               >
                 JSON {mostrarJson ? 'ON' : 'OFF'}
-              </button>
-              <button
-                onClick={abrirAnalise}
-                className="px-2.5 py-1 rounded text-xs font-semibold transition-colors bg-blue-400/20 text-blue-200 hover:bg-blue-400/30"
-                title="Analisar prompt (erros, incoerencias, duplicatas)"
-              >
-                <span className="flex items-center gap-1"><Search size={12} /> Analisar</span>
-              </button>
-              <button
-                onClick={abrirMelhoria}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
-                  mensagens.length > 0
-                    ? 'bg-yellow-400/20 text-yellow-200 hover:bg-yellow-400/30'
-                    : 'text-alisson-300/50 cursor-not-allowed'
-                }`}
-                disabled={mensagens.length === 0}
-                title="Apontar melhorias no prompt"
-              >
-                <span className="flex items-center gap-1"><Wand2 size={12} /> Melhorar</span>
               </button>
               <button
                 onClick={reiniciar}
@@ -1183,26 +1135,7 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
             </div>
           </div>
 
-          {/* Visualizador de prompt */}
-          {mostrarPrompt ? (
-            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-bold text-alisson-600 uppercase tracking-wider">Prompt do Sistema Ativo</p>
-                <button
-                  onClick={() => navigator.clipboard.writeText(agente.prompt_sistema)}
-                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-alisson-600 transition-colors"
-                >
-                  <Copy size={12} />
-                  Copiar
-                </button>
-              </div>
-              <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono bg-white p-4 rounded-lg border border-gray-200 leading-relaxed">
-                {agente.prompt_sistema || 'Nenhum prompt configurado'}
-              </pre>
-            </div>
-          ) : (
-            <>
-              {/* Mensagens */}
+          {/* Mensagens */}
               <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
                 {mensagens.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400 text-center">
@@ -1384,8 +1317,6 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
                   <input ref={fileRef} type="file" className="hidden" onChange={handleFileChange} />
                 </div>
               </div>
-            </>
-          )}
         </div>
 
         {/* Painel lateral - Score e BANT */}
@@ -1500,378 +1431,6 @@ function Simulador({ agente: agenteInicial, onVoltar }: { agente: Agente; onVolt
         </div>
       </div>
 
-      {/* Modal Melhorar Prompt (3 etapas) */}
-      {modalMelhoria && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
-            {/* Header com indicador de etapa */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                  etapaMelhoria === 'input' ? 'bg-yellow-100' : etapaMelhoria === 'analise' ? 'bg-blue-100' : 'bg-green-100'
-                }`}>
-                  {etapaMelhoria === 'input' && <Wand2 size={18} className="text-yellow-600" />}
-                  {etapaMelhoria === 'analise' && <Search size={18} className="text-blue-600" />}
-                  {etapaMelhoria === 'aplicado' && <CheckCircle size={18} className="text-green-600" />}
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-800">
-                    {etapaMelhoria === 'input' && 'Melhorar Prompt'}
-                    {etapaMelhoria === 'analise' && 'Revisar Mudancas'}
-                    {etapaMelhoria === 'aplicado' && 'Melhoria Aplicada'}
-                  </h3>
-                  <p className="text-xs text-gray-400">
-                    {etapaMelhoria === 'input' && 'Etapa 1/3 — Descreva o que precisa melhorar'}
-                    {etapaMelhoria === 'analise' && 'Etapa 2/3 — Revise o plano e aprove ou rejeite'}
-                    {etapaMelhoria === 'aplicado' && 'Etapa 3/3 — Prompt atualizado com sucesso'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                {/* Indicador visual das etapas */}
-                <div className="flex items-center gap-1.5">
-                  <div className={`w-2.5 h-2.5 rounded-full ${etapaMelhoria === 'input' ? 'bg-yellow-500' : 'bg-green-500'}`} />
-                  <div className={`w-6 h-0.5 ${etapaMelhoria !== 'input' ? 'bg-green-400' : 'bg-gray-200'}`} />
-                  <div className={`w-2.5 h-2.5 rounded-full ${etapaMelhoria === 'analise' ? 'bg-blue-500' : etapaMelhoria === 'aplicado' ? 'bg-green-500' : 'bg-gray-200'}`} />
-                  <div className={`w-6 h-0.5 ${etapaMelhoria === 'aplicado' ? 'bg-green-400' : 'bg-gray-200'}`} />
-                  <div className={`w-2.5 h-2.5 rounded-full ${etapaMelhoria === 'aplicado' ? 'bg-green-500' : 'bg-gray-200'}`} />
-                </div>
-                <button onClick={() => setModalMelhoria(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                  <X size={18} className="text-gray-400" />
-                </button>
-              </div>
-            </div>
-
-            {/* Conteudo */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {/* ETAPA 1: Input de feedback */}
-              {etapaMelhoria === 'input' && (
-                <>
-                  {mensagens.length > 0 && (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Conversa de referencia</p>
-                      <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                        {mensagens.map((m, i) => (
-                          <div key={i} className="flex gap-2 text-xs">
-                            <span className={`font-semibold flex-shrink-0 ${m.papel === 'lead' ? 'text-blue-600' : 'text-alisson-600'}`}>
-                              {m.papel === 'lead' ? 'Lead:' : `${agente.nome}:`}
-                            </span>
-                            <span className="text-gray-600 truncate">{m.texto}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">O que precisa melhorar?</label>
-                    <textarea
-                      ref={feedbackRef}
-                      value={feedbackMelhoria}
-                      onChange={e => setFeedbackMelhoria(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) enviarMelhoria(); }}
-                      placeholder={"Ex:\n- A saudacao esta muito formal, deixar mais natural\n- Nao perguntar o nome 2 vezes seguidas\n- Quando o cliente pedir preco, redirecionar para a consultora\n- Adicionar regra para nao usar emojis"}
-                      className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 resize-none leading-relaxed"
-                      rows={5}
-                      disabled={melhorando}
-                    />
-                    <p className="text-xs text-gray-400 mt-1">Ctrl+Enter para enviar. A IA vai analisar e propor as mudancas antes de aplicar.</p>
-                  </div>
-                </>
-              )}
-
-              {/* ETAPA 2: Analise e aprovacao */}
-              {etapaMelhoria === 'analise' && analiseMelhoria && (
-                <>
-                  {/* Resumo */}
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                    <p className="text-sm font-semibold text-blue-800 mb-1">Resumo da analise</p>
-                    <p className="text-xs text-blue-700 leading-relaxed">{analiseMelhoria.resumo}</p>
-                  </div>
-
-                  {/* Mudancas propostas */}
-                  {analiseMelhoria.mudancas?.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Mudancas propostas</p>
-                      {analiseMelhoria.mudancas.map((m: any, i: number) => (
-                        <div key={i} className="bg-white border border-gray-200 rounded-xl p-4">
-                          <div className="flex items-center gap-2 mb-2">
-                            <ArrowRight size={14} className="text-alisson-500" />
-                            <span className="text-xs font-bold text-alisson-700">{m.local}</span>
-                          </div>
-                          {m.de && (
-                            <div className="flex items-start gap-2 mb-1.5">
-                              <XCircle size={12} className="text-red-400 mt-0.5 flex-shrink-0" />
-                              <p className="text-xs text-red-600 line-through leading-relaxed">{m.de}</p>
-                            </div>
-                          )}
-                          <div className="flex items-start gap-2 mb-1.5">
-                            <CheckCircle size={12} className="text-green-500 mt-0.5 flex-shrink-0" />
-                            <p className="text-xs text-green-700 leading-relaxed">{m.para}</p>
-                          </div>
-                          {m.motivo && (
-                            <p className="text-[11px] text-gray-400 italic ml-5">{m.motivo}</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Erros encontrados */}
-                  {analiseMelhoria.erros_encontrados?.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <AlertTriangle size={13} /> Erros encontrados e corrigidos
-                      </p>
-                      <ul className="space-y-1">
-                        {analiseMelhoria.erros_encontrados.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-red-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-red-400 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Incoerencias */}
-                  {analiseMelhoria.incoerencias_encontradas?.length > 0 && (
-                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <AlertTriangle size={13} /> Incoerencias detectadas e resolvidas
-                      </p>
-                      <ul className="space-y-1">
-                        {analiseMelhoria.incoerencias_encontradas.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-orange-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-orange-400 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Duplicatas */}
-                  {analiseMelhoria.duplicatas_encontradas?.length > 0 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Copy size={13} /> Duplicatas removidas
-                      </p>
-                      <ul className="space-y-1">
-                        {analiseMelhoria.duplicatas_encontradas.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-yellow-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-yellow-500 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Preview do prompt proposto */}
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Preview do prompt proposto</p>
-                    <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono bg-white p-3 rounded-lg border border-gray-200 leading-relaxed max-h-48 overflow-y-auto">
-                      {promptProposto}
-                    </pre>
-                  </div>
-                </>
-              )}
-
-              {/* ETAPA 3: Aplicado */}
-              {etapaMelhoria === 'aplicado' && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
-                  <CheckCircle size={40} className="text-green-500 mx-auto mb-3" />
-                  <p className="text-lg font-bold text-green-700 mb-1">Prompt atualizado!</p>
-                  <p className="text-sm text-green-600">
-                    As mudancas foram aprovadas e salvas. Reinicie a conversa para testar com o novo prompt.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
-              {etapaMelhoria === 'input' && (
-                <>
-                  <button onClick={() => setModalMelhoria(false)} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">
-                    Cancelar
-                  </button>
-                  <button
-                    onClick={enviarMelhoria}
-                    disabled={melhorando || !feedbackMelhoria.trim()}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-                  >
-                    {melhorando ? (
-                      <><Loader2 size={16} className="animate-spin" /> Analisando...</>
-                    ) : (
-                      <><Search size={16} /> Analisar Mudancas</>
-                    )}
-                  </button>
-                </>
-              )}
-              {etapaMelhoria === 'analise' && (
-                <>
-                  <button onClick={rejeitarMelhoria} className="flex items-center gap-2 px-4 py-2 text-sm text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                    <XCircle size={16} /> Rejeitar
-                  </button>
-                  <button
-                    onClick={aprovarMelhoria}
-                    disabled={aplicando}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-                  >
-                    {aplicando ? (
-                      <><Loader2 size={16} className="animate-spin" /> Aplicando...</>
-                    ) : (
-                      <><Check size={16} /> Aprovar e Aplicar</>
-                    )}
-                  </button>
-                </>
-              )}
-              {etapaMelhoria === 'aplicado' && (
-                <button
-                  onClick={() => setModalMelhoria(false)}
-                  className="ml-auto px-5 py-2.5 bg-alisson-600 hover:bg-alisson-500 text-white rounded-xl text-sm font-medium transition-colors"
-                >
-                  Fechar
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal Analisar Prompt (standalone) */}
-      {modalAnalise && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
-                  <Search size={18} className="text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-gray-800">Analise do Prompt</h3>
-                  <p className="text-xs text-gray-400">Verificacao de erros, incoerencias e duplicatas</p>
-                </div>
-              </div>
-              <button onClick={() => setModalAnalise(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                <X size={18} className="text-gray-400" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {analisando ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
-                  <p className="text-sm text-gray-500">Analisando o prompt...</p>
-                </div>
-              ) : analisePrompt ? (
-                <>
-                  {/* Score de qualidade */}
-                  <div className="flex items-center gap-4 bg-gray-50 rounded-xl p-4">
-                    <div className="relative w-16 h-16 flex-shrink-0">
-                      <svg width="64" height="64" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="42" fill="none" stroke="#f3f4f6" strokeWidth="8" />
-                        <circle cx="50" cy="50" r="42" fill="none"
-                          className={analisePrompt.score_qualidade >= 80 ? 'stroke-green-500' : analisePrompt.score_qualidade >= 50 ? 'stroke-yellow-400' : 'stroke-red-400'}
-                          strokeWidth="8" strokeLinecap="round"
-                          strokeDasharray={`${(analisePrompt.score_qualidade / 100) * 264} 264`}
-                          transform="rotate(-90 50 50)"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className={`text-lg font-extrabold ${analisePrompt.score_qualidade >= 80 ? 'text-green-600' : analisePrompt.score_qualidade >= 50 ? 'text-yellow-600' : 'text-red-500'}`}>
-                          {analisePrompt.score_qualidade}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">Qualidade do Prompt</p>
-                      <p className="text-xs text-gray-500 leading-relaxed mt-1">{analisePrompt.nota_geral}</p>
-                    </div>
-                  </div>
-
-                  {/* Erros */}
-                  {analisePrompt.erros?.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-red-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <XCircle size={13} /> Erros ({analisePrompt.erros.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {analisePrompt.erros.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-red-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-red-400 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Incoerencias */}
-                  {analisePrompt.incoerencias?.length > 0 && (
-                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <AlertTriangle size={13} /> Incoerencias ({analisePrompt.incoerencias.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {analisePrompt.incoerencias.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-orange-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-orange-400 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Duplicatas */}
-                  {analisePrompt.duplicatas?.length > 0 && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-yellow-700 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Copy size={13} /> Duplicatas ({analisePrompt.duplicatas.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {analisePrompt.duplicatas.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-yellow-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-yellow-500 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Melhorias sugeridas */}
-                  {analisePrompt.melhorias_sugeridas?.length > 0 && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Wand2 size={13} /> Sugestoes de melhoria ({analisePrompt.melhorias_sugeridas.length})
-                      </p>
-                      <ul className="space-y-1.5">
-                        {analisePrompt.melhorias_sugeridas.map((e: string, i: number) => (
-                          <li key={i} className="text-xs text-blue-700 leading-relaxed flex items-start gap-1.5">
-                            <span className="text-blue-400 mt-0.5">•</span> {e}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Tudo OK */}
-                  {!analisePrompt.erros?.length && !analisePrompt.incoerencias?.length && !analisePrompt.duplicatas?.length && (
-                    <div className="bg-green-50 border border-green-200 rounded-xl p-6 text-center">
-                      <CheckCircle size={32} className="text-green-500 mx-auto mb-2" />
-                      <p className="text-sm font-semibold text-green-700">Nenhum problema encontrado!</p>
-                      <p className="text-xs text-green-600 mt-1">O prompt esta consistente e sem erros.</p>
-                    </div>
-                  )}
-                </>
-              ) : null}
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end">
-              <button onClick={() => setModalAnalise(false)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition-colors">
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

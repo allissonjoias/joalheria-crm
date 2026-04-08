@@ -70,55 +70,78 @@ export default function Vendas() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3 md:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-alisson-600">Vendas</h1>
-          <p className="text-gray-500 text-sm mt-1">{vendas.length} vendas - Total: {formatarMoeda(totalVendas)}</p>
+          <h1 className="hidden md:block text-2xl font-bold text-alisson-600">Vendas</h1>
+          <p className="text-gray-500 text-xs md:text-sm mt-1">{vendas.length} vendas - Total: {formatarMoeda(totalVendas)}</p>
         </div>
-        <Tooltip texto="Registrar uma venda manualmente com cliente, produto e forma de pagamento" posicao="left">
-          <Button onClick={() => setModalAberto(true)}>
-            <Plus size={16} /> Nova Venda
+        <Tooltip texto="Registrar uma venda manualmente" posicao="left">
+          <Button onClick={() => setModalAberto(true)} tamanho="sm" className="md:!text-sm">
+            <Plus size={16} /> <span className="hidden sm:inline">Nova</span> Venda
           </Button>
         </Tooltip>
       </div>
 
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100">
-                <Tooltip texto="Data em que a venda foi realizada" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th></Tooltip>
-                <Tooltip texto="Nome do cliente que realizou a compra" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Cliente</th></Tooltip>
-                <Tooltip texto="Produto vendido (pode ser vazio em vendas sob encomenda)" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produto</th></Tooltip>
-                <Tooltip texto="Valor total da venda em reais" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Valor</th></Tooltip>
-                <Tooltip texto="Forma de pagamento utilizada: PIX, cartao, dinheiro" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Pagamento</th></Tooltip>
-                <Tooltip texto="Vendedor responsavel pela venda" posicao="bottom"><th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendedor</th></Tooltip>
-              </tr>
-            </thead>
-            <tbody>
-              {vendas.map((v) => (
-                <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
-                  <td className="py-3 px-4 text-sm text-gray-700">{new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-sm font-medium text-alisson-600">{v.cliente_nome}</td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{v.produto_nome || '-'}</td>
-                  <td className="py-3 px-4">
-                    <span className="text-sm font-semibold text-alisson-600 flex items-center gap-1">
-                      <DollarSign size={14} /> {formatarMoeda(v.valor)}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4">
-                    {v.metodo_pagamento && <Badge cor="blue">{METODOS[v.metodo_pagamento] || v.metodo_pagamento}</Badge>}
-                  </td>
-                  <td className="py-3 px-4 text-sm text-gray-600">{v.vendedor_nome || '-'}</td>
+      {/* Desktop: tabela */}
+      <div className="hidden md:block">
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Data</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Cliente</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Produto</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Valor</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Pagamento</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-500">Vendedor</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {vendas.length === 0 && (
-            <div className="text-center py-12 text-gray-400">Nenhuma venda registrada</div>
-          )}
-        </div>
-      </Card>
+              </thead>
+              <tbody>
+                {vendas.map((v) => (
+                  <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-3 px-4 text-sm text-gray-700">{new Date(v.data_venda).toLocaleDateString('pt-BR')}</td>
+                    <td className="py-3 px-4 text-sm font-medium text-alisson-600">{v.cliente_nome}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{v.produto_nome || '-'}</td>
+                    <td className="py-3 px-4">
+                      <span className="text-sm font-semibold text-alisson-600 flex items-center gap-1">
+                        <DollarSign size={14} /> {formatarMoeda(v.valor)}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {v.metodo_pagamento && <Badge cor="blue">{METODOS[v.metodo_pagamento] || v.metodo_pagamento}</Badge>}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-gray-600">{v.vendedor_nome || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {vendas.length === 0 && (
+              <div className="text-center py-12 text-gray-400">Nenhuma venda registrada</div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Mobile: cards */}
+      <div className="md:hidden space-y-3">
+        {vendas.map((v) => (
+          <Card key={v.id} className="p-3">
+            <div className="flex items-start justify-between mb-1">
+              <p className="text-sm font-medium text-alisson-600">{v.cliente_nome}</p>
+              <span className="text-sm font-bold text-alisson-600">{formatarMoeda(v.valor)}</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {v.produto_nome && <span className="text-xs text-gray-500">{v.produto_nome}</span>}
+              {v.metodo_pagamento && <Badge cor="blue">{METODOS[v.metodo_pagamento] || v.metodo_pagamento}</Badge>}
+              <span className="text-xs text-gray-400 ml-auto">{new Date(v.data_venda).toLocaleDateString('pt-BR')}</span>
+            </div>
+          </Card>
+        ))}
+        {vendas.length === 0 && (
+          <div className="text-center py-12 text-gray-400">Nenhuma venda registrada</div>
+        )}
+      </div>
 
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Nova Venda">
         <div className="space-y-4">
@@ -136,7 +159,7 @@ export default function Vendas() {
               {produtos.map(p => <option key={p.id} value={p.id}>{p.nome} - {formatarMoeda(p.preco)}</option>)}
             </select>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
             <Input label="Valor" type="number" step="0.01" value={form.valor} onChange={(e) => setForm({...form, valor: e.target.value})} required />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Pagamento</label>

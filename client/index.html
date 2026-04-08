@@ -2,9 +2,39 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2d5c4f" />
+    <meta name="description" content="IAlisson - CRM com IA para joalheria. Pipeline, mensageria, automacoes." />
+
+    <!-- iOS PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="IAlisson" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+
+    <!-- Splash screens iOS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- Icons -->
     <link rel="icon" type="image/svg+xml" href="/leao.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
+
     <title>IAlisson - Alisson Joalheria</title>
+
+    <style>
+      /* Prevent pull-to-refresh on mobile */
+      body { overscroll-behavior-y: contain; }
+      /* Safe area padding for notch devices */
+      :root {
+        --sat: env(safe-area-inset-top);
+        --sab: env(safe-area-inset-bottom);
+        --sal: env(safe-area-inset-left);
+        --sar: env(safe-area-inset-right);
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

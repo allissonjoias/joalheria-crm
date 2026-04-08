@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">WhatsAlisson</string>
-    <string name="title_activity_main">WhatsAlisson</string>
+    <string name="app_name">IAlisson</string>
+    <string name="title_activity_main">IAlisson</string>
     <string name="package_name">com.alissonjoalheria.whatsalisson</string>
     <string name="custom_url_scheme">com.alissonjoalheria.whatsalisson</string>
 </resources>

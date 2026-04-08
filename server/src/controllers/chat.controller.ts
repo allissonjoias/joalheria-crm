@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../config/database';
 import { ClaudeService, MensagemChat } from '../services/claude.service';
 import { ExtracaoService } from '../services/extracao.service';
+import { agoraLocal } from '../utils/timezone';
 
 const claudeService = new ClaudeService();
 const extracaoService = new ExtracaoService();
@@ -87,8 +88,8 @@ export class ChatController {
       // Save user message
       const userMsgId = uuidv4();
       db.prepare(
-        'INSERT INTO mensagens (id, conversa_id, papel, conteudo) VALUES (?, ?, ?, ?)'
-      ).run(userMsgId, conversa_id, 'user', mensagem);
+        'INSERT INTO mensagens (id, conversa_id, papel, conteudo, criado_em) VALUES (?, ?, ?, ?, ?)'
+      ).run(userMsgId, conversa_id, 'user', mensagem, agoraLocal());
 
       // Get conversation history
       const mensagensDb = db.prepare(
@@ -106,8 +107,8 @@ export class ChatController {
       // Save assistant response
       const assistantMsgId = uuidv4();
       db.prepare(
-        'INSERT INTO mensagens (id, conversa_id, papel, conteudo) VALUES (?, ?, ?, ?)'
-      ).run(assistantMsgId, conversa_id, 'assistant', resposta);
+        'INSERT INTO mensagens (id, conversa_id, papel, conteudo, criado_em) VALUES (?, ?, ?, ?, ?)'
+      ).run(assistantMsgId, conversa_id, 'assistant', resposta, agoraLocal());
 
       // Update conversation timestamp
       db.prepare("UPDATE conversas SET atualizado_em = datetime('now', 'localtime') WHERE id = ?").run(conversa_id);

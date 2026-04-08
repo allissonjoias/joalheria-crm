@@ -3,6 +3,7 @@ import { SdrEvento } from './sdr-event-detector.service';
 import { getDb, saveDb } from '../config/database';
 import { EvolutionService } from './evolution.service';
 import { ClaudeService } from './claude.service';
+import { agoraLocal } from '../utils/timezone';
 
 export class SdrActionEngineService {
   private polling = new SdrPollingService();
@@ -133,7 +134,9 @@ REGRAS OBRIGATORIAS:
 
     try {
       const db = getDb();
-      const vencimento = new Date(Date.now() + deadlineHoras * 3600000).toISOString();
+      const d = new Date(Date.now() + deadlineHoras * 3600000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const vencimento = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 
       db.prepare(
         `INSERT INTO tarefas (pipeline_id, titulo, descricao, tipo, prioridade, data_vencimento)
@@ -158,7 +161,9 @@ REGRAS OBRIGATORIAS:
 
     try {
       const db = getDb();
-      const vencimento = new Date(Date.now() + deadlineHoras * 3600000).toISOString();
+      const d = new Date(Date.now() + deadlineHoras * 3600000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const vencimento = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 
       db.prepare(
         `INSERT INTO tarefas (pipeline_id, titulo, descricao, tipo, prioridade, data_vencimento)
@@ -183,7 +188,9 @@ REGRAS OBRIGATORIAS:
 
     try {
       const db = getDb();
-      const vencimento = new Date(Date.now() + deadlineHoras * 3600000).toISOString();
+      const d = new Date(Date.now() + deadlineHoras * 3600000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const vencimento = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 
       db.prepare(
         `INSERT INTO tarefas (pipeline_id, titulo, descricao, tipo, prioridade, data_vencimento)

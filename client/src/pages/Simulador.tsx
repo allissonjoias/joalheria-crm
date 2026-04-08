@@ -281,16 +281,16 @@ export default function Simulador() {
   const labelBant = bantTotal >= 80 ? 'QUENTE' : bantTotal >= 55 ? 'MORNO' : bantTotal >= 25 ? 'FRIO' : 'DESCARTE';
 
   return (
-    <div className="p-4 lg:p-6 max-w-[1600px] mx-auto">
+    <div className="p-3 md:p-4 lg:p-6 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 md:mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <Zap size={28} className="text-amber-500" />
-            Simulador do CRM
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Zap size={22} className="text-amber-500" />
+            Simulador
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Veja como a IA automatiza todo o processo de vendas, do primeiro contato ao fechamento
+          <p className="text-xs md:text-sm text-gray-500 mt-1">
+            IA automatizando vendas do primeiro contato ao fechamento
           </p>
         </div>
         <div className="flex gap-2">

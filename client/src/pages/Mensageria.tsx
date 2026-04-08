@@ -325,13 +325,22 @@ export default function Mensageria() {
     toggleModoAuto,
     solicitarScoring,
     excluirConversa,
+    limparMensagens,
   } = useMensageria();
+
+  // Mobile: mostrar lista ou conversa (nao ambos)
+  const [mobileSdrOpen, setMobileSdrOpen] = useState(false);
+  const mobileShowChat = !!conversaAtual;
+
+  const handleVoltarLista = () => {
+    selecionarConversa(null as any);
+  };
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {/* Painel esquerdo - Lista de conversas (estilo WhatsApp) */}
-        <div className="w-[380px] flex-shrink-0 border-r border-wa-border flex flex-col">
+        {/* Painel esquerdo - Lista de conversas */}
+        <div className={`${mobileShowChat ? 'hidden md:flex' : 'flex'} w-full md:w-[380px] flex-shrink-0 border-r border-wa-border flex-col`}>
           <ConversaList
             conversas={conversas}
             conversaAtualId={conversaAtual?.id || null}
@@ -342,7 +351,7 @@ export default function Mensageria() {
         </div>
 
         {/* Painel central - Chat */}
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className={`${!mobileShowChat ? 'hidden md:flex' : 'flex'} flex-1 flex-col min-w-0 min-h-0 overflow-hidden`}>
           <MensageriaWindow
             conversa={conversaAtual}
             mensagens={mensagens}
@@ -352,28 +361,58 @@ export default function Mensageria() {
             onEnviarMidia={enviarMidia}
             onToggleModoAuto={toggleModoAuto}
             onExcluir={excluirConversa}
+            onLimparMensagens={limparMensagens}
+            onVoltar={handleVoltarLista}
+            onToggleSdr={() => setMobileSdrOpen(!mobileSdrOpen)}
           />
         </div>
 
-        {/* Painel direito - Dados do cliente + Qualificacao SDR */}
+        {/* Painel direito - SDR (desktop: lateral, mobile: overlay) */}
         {conversaAtual && (
-          <div className="w-[280px] flex-shrink-0 bg-white border-l border-wa-border overflow-y-auto">
-            {/* Qualificacao SDR */}
-            <SdrPanel conversaId={conversaAtual.id} />
-
-            {/* Dados extraídos da conversa */}
-            <div className="border-t border-gray-200">
-              <div className="bg-gray-100 px-4 py-3">
-                <h2 className="font-medium text-gray-700 text-sm">Dados do Cliente</h2>
+          <>
+            {/* Desktop */}
+            <div className="hidden md:block w-[280px] flex-shrink-0 bg-white border-l border-wa-border overflow-y-auto">
+              <SdrPanel conversaId={conversaAtual.id} />
+              <div className="border-t border-gray-200">
+                <div className="bg-gray-100 px-4 py-3">
+                  <h2 className="font-medium text-gray-700 text-sm">Dados do Cliente</h2>
+                </div>
+                <DadosExtraidos
+                  dados={dadosExtraidos}
+                  scoring={scoring}
+                  onSoliciarScoring={solicitarScoring}
+                  scoringLoading={scoringLoading}
+                />
               </div>
-              <DadosExtraidos
-                dados={dadosExtraidos}
-                scoring={scoring}
-                onSoliciarScoring={solicitarScoring}
-                scoringLoading={scoringLoading}
-              />
             </div>
-          </div>
+
+            {/* Mobile: SDR panel como overlay */}
+            {mobileSdrOpen && (
+              <div className="md:hidden fixed inset-0 z-50 flex flex-col">
+                <div className="absolute inset-0 bg-black/50" onClick={() => setMobileSdrOpen(false)} />
+                <div className="relative mt-auto bg-white rounded-t-2xl max-h-[80vh] overflow-y-auto">
+                  <div className="sticky top-0 bg-white border-b border-gray-100 flex items-center justify-between px-4 py-3 rounded-t-2xl">
+                    <span className="font-semibold text-sm text-alisson-600">Qualificacao SDR</span>
+                    <button onClick={() => setMobileSdrOpen(false)} className="text-gray-400 p-1">
+                      <AlertTriangle size={16} className="rotate-180" />
+                    </button>
+                  </div>
+                  <SdrPanel conversaId={conversaAtual.id} />
+                  <div className="border-t border-gray-200">
+                    <div className="bg-gray-100 px-4 py-3">
+                      <h2 className="font-medium text-gray-700 text-sm">Dados do Cliente</h2>
+                    </div>
+                    <DadosExtraidos
+                      dados={dadosExtraidos}
+                      scoring={scoring}
+                      onSoliciarScoring={solicitarScoring}
+                      scoringLoading={scoringLoading}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -3,7 +3,9 @@ import { SdrPollingService } from './sdr-polling.service';
 import { SdrNotificationService } from './sdr-notification.service';
 import { SdrActionEngineService } from './sdr-action-engine.service';
 import { cicloVidaService } from './ciclo-vida.service';
+import { brechasService } from './brechas.service';
 import { automacaoEngine } from './automacao-engine.service';
+import { fusoAtual } from '../utils/timezone';
 
 interface ScheduledJob {
   nome: string;
@@ -42,7 +44,7 @@ export class SdrSchedulerService {
       } catch (e) {
         console.error('[SDR] Erro no polling agendado:', e);
       }
-    }, { timezone: 'America/Sao_Paulo' });
+    }, { timezone: fusoAtual() });
 
     this.jobs.push({ nome: 'polling', task: pollingJob });
 
@@ -55,7 +57,7 @@ export class SdrSchedulerService {
         } catch (e) {
           console.error('[SDR] Erro no resumo da manha:', e);
         }
-      }, { timezone: 'America/Sao_Paulo' });
+      }, { timezone: fusoAtual() });
 
       this.jobs.push({ nome: 'resumo_manha', task: manhaJob });
     }
@@ -69,7 +71,7 @@ export class SdrSchedulerService {
         } catch (e) {
           console.error('[SDR] Erro no resumo da tarde:', e);
         }
-      }, { timezone: 'America/Sao_Paulo' });
+      }, { timezone: fusoAtual() });
 
       this.jobs.push({ nome: 'resumo_tarde', task: tardeJob });
     }
@@ -85,7 +87,7 @@ export class SdrSchedulerService {
       } catch (e) {
         console.error('[SDR] Erro na verificacao de inativos:', e);
       }
-    }, { timezone: 'America/Sao_Paulo' });
+    }, { timezone: fusoAtual() });
 
     this.jobs.push({ nome: 'inativos', task: inativosJob });
 
@@ -97,18 +99,33 @@ export class SdrSchedulerService {
       } catch (e) {
         console.error('[CICLO-VIDA] Erro ao processar nutricoes:', e);
       }
-    }, { timezone: 'America/Sao_Paulo' });
+    }, { timezone: fusoAtual() });
 
     this.jobs.push({ nome: 'ciclo_vida', task: cicloVidaJob });
 
-    // Job 6: Automacao - processar waits pendentes (a cada 1 minuto)
+    // Job 6: Brechas Engine - detectar gaps no funil (a cada 2 horas)
+    const brechasJob = cron.schedule('15 */2 * * *', () => {
+      try {
+        console.log('[BRECHAS] Detectando brechas no funil...');
+        const resumo = brechasService.detectarBrechas();
+        if (resumo.total > 0) {
+          console.log(`[BRECHAS] ${resumo.total} novas brechas detectadas. Total abertas: ${resumo.abertas}`);
+        }
+      } catch (e) {
+        console.error('[BRECHAS] Erro ao detectar brechas:', e);
+      }
+    }, { timezone: fusoAtual() });
+
+    this.jobs.push({ nome: 'brechas', task: brechasJob });
+
+    // Job 7: Automacao - processar waits pendentes (a cada 1 minuto)
     const automacaoJob = cron.schedule('* * * * *', () => {
       try {
         automacaoEngine.processarWaitsPendentes();
       } catch (e) {
         console.error('[AUTOMACAO] Erro ao processar waits pendentes:', e);
       }
-    }, { timezone: 'America/Sao_Paulo' });
+    }, { timezone: fusoAtual() });
 
     this.jobs.push({ nome: 'automacao_waits', task: automacaoJob });
 

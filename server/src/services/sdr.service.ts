@@ -2,6 +2,7 @@ import { getDb, saveDb } from '../config/database';
 import { ClaudeService, MensagemChat } from './claude.service';
 import { EvolutionService } from './evolution.service';
 import { markBotSent } from './whatsapp-queue.service';
+import { skillService } from './skill.service';
 
 // Estagios locais do SDR (usados para rastrear progresso BANT)
 const STAGES = {
@@ -61,12 +62,21 @@ function limparRespostaIA(raw: string): string {
       if (parsed.resposta) return String(parsed.resposta).trim();
     } catch { /* not valid JSON */ }
   }
-  // Last resort: regex extract resposta from broken JSON
-  if (text.startsWith('{') && text.includes('"resposta"')) {
+  // Regex extract resposta from broken/truncated JSON
+  if (text.includes('"resposta"')) {
+    // Try with double quotes
     const respostaMatch = text.match(/"resposta"\s*:\s*"((?:[^"\\]|\\.)*)"/);
     if (respostaMatch) return respostaMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    // Try capturing everything after "resposta":" until end or next field
+    const fallbackMatch = text.match(/"resposta"\s*:\s*"([^"]*)/);
+    if (fallbackMatch && fallbackMatch[1].length > 5) {
+      return fallbackMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+    }
   }
-  return text;
+  // Remove any leading JSON fragments like {"resposta": from the text
+  text = text.replace(/^\s*\{[^}]*"resposta"\s*:\s*"?/, '').replace(/"\s*,?\s*"?\w+"?\s*:?[^}]*}?\s*$/, '').trim();
+  if (text.length > 5) return text;
+  return raw.trim();
 }
 
 /**
@@ -128,7 +138,7 @@ class SdrService {
   }
 
   /**
-   * Load the active agent prompt from agentes_ia table.
+   * Load the active agent prompt from skills or agentes_ia table.
    * Returns the agent prompt or null if no active SDR agent exists (paused).
    */
   private getAgentePrompt(): string | null {
@@ -136,25 +146,53 @@ class SdrService {
       const db = getDb();
       // Try SDR-specific agent first
       let agente = db.prepare(
-        "SELECT prompt_sistema FROM agentes_ia WHERE ativo = 1 AND area = 'sdr' LIMIT 1"
+        "SELECT id, prompt_sistema FROM agentes_ia WHERE ativo = 1 AND area = 'sdr' LIMIT 1"
       ).get() as any;
 
       if (!agente) {
         // Fallback: first active agent
         agente = db.prepare(
-          "SELECT prompt_sistema FROM agentes_ia WHERE ativo = 1 ORDER BY id ASC LIMIT 1"
+          "SELECT id, prompt_sistema FROM agentes_ia WHERE ativo = 1 ORDER BY id ASC LIMIT 1"
         ).get() as any;
       }
 
-      if (agente?.prompt_sistema) {
+      if (!agente) return null;
+
+      // Try skills-based prompt first
+      if (skillService.temSkills(agente.id)) {
+        const promptFromSkills = skillService.montarPrompt(agente.id);
+        if (promptFromSkills) {
+          // Inject dynamic product catalog into {{PRODUTOS}} placeholder
+          const produtos = this.getProdutosFormatados();
+          return promptFromSkills.replace('{{PRODUTOS}}', produtos);
+        }
+      }
+
+      // Fallback to monolithic prompt
+      if (agente.prompt_sistema) {
         return agente.prompt_sistema;
       }
     } catch (err) {
       console.warn('[SDR] Erro ao buscar agente IA:', err);
     }
 
-    // No active agent — SDR paused
     return null;
+  }
+
+  private getProdutosFormatados(): string {
+    try {
+      const db = getDb();
+      const produtos = db.prepare('SELECT nome, categoria, material, pedra, preco, estoque FROM produtos WHERE ativo = 1').all() as any[];
+      return produtos.map((p: any) => {
+        let linha = `- ${p.nome} (${p.material})`;
+        if (p.pedra) linha += ` com ${p.pedra}`;
+        linha += ` - R$ ${p.preco.toFixed(2).replace('.', ',')}`;
+        if (p.estoque === 0) linha += ' [Sob encomenda]';
+        return linha;
+      }).join('\n');
+    } catch {
+      return '(catalogo indisponivel)';
+    }
   }
 
   private getAgenteNome(): string {
@@ -339,30 +377,66 @@ Historico resumido: ${historicoResumido}
       }
     }
 
-    // Generate SDR response using agent prompt from agentes_ia
-    const agentePrompt = this.getAgentePrompt();
-    if (!agentePrompt) {
+    // Check if agent uses multi-agent architecture
+    const db2 = getDb();
+    let agente = db2.prepare("SELECT id FROM agentes_ia WHERE ativo = 1 AND area = 'sdr' LIMIT 1").get() as any;
+    if (!agente) agente = db2.prepare("SELECT id FROM agentes_ia WHERE ativo = 1 ORDER BY id ASC LIMIT 1").get() as any;
+
+    if (!agente) {
       console.log('[SDR] Agente SDR pausado, nao respondendo');
-      return false; // Let other handlers (or human) respond
+      return false;
     }
 
+    const isMultiAgente = skillService.isMultiAgente(agente.id);
     let respostaTexto = '';
     let lumaResponse: LumaResponse | null = null;
 
-    try {
-      const rawResp = await claudeService.simularDara(agentePrompt, historico, 500);
+    if (isMultiAgente) {
+      // ===== FLUXO MULTI-AGENTE (2 chamadas) =====
+      try {
+        // CHAMADA 1: Router decide qual sub-agente
+        const subAgenteSelecionado = await skillService.routeMessage(
+          agente.id, texto, contextoLead, historico
+        );
+        console.log(`[SDR] Router → Sub-agente: ${subAgenteSelecionado}`);
 
-      // Try to parse as structured Luma JSON response
-      lumaResponse = parsearRespostaLuma(rawResp);
-      if (lumaResponse) {
-        respostaTexto = lumaResponse.resposta;
-      } else {
-        // Fallback: use limparRespostaIA for the text
-        respostaTexto = limparRespostaIA(rawResp);
+        // CHAMADA 2: Sub-agente gera resposta
+        const produtos = this.getProdutosFormatados();
+        const rawResp = await skillService.gerarResposta(
+          agente.id, subAgenteSelecionado, historico, contextoLead, produtos
+        );
+
+        lumaResponse = parsearRespostaLuma(rawResp);
+        if (lumaResponse) {
+          respostaTexto = lumaResponse.resposta;
+        } else {
+          respostaTexto = limparRespostaIA(rawResp);
+        }
+      } catch (err) {
+        console.error('[SDR] Erro no fluxo multi-agente:', err);
+        return true;
       }
-    } catch (err) {
-      console.error('[SDR] Erro ao gerar resposta SDR:', err);
-      return true;
+    } else {
+      // ===== FLUXO LEGADO (1 chamada, prompt monolitico) =====
+      const agentePrompt = this.getAgentePrompt();
+      if (!agentePrompt) {
+        console.log('[SDR] Agente SDR pausado, nao respondendo');
+        return false;
+      }
+
+      try {
+        const config = skillService.getAgenteConfig(agente.id);
+        const rawResp = await claudeService.simularDara(agentePrompt, historico, config.max_tokens, config.temperatura);
+        lumaResponse = parsearRespostaLuma(rawResp);
+        if (lumaResponse) {
+          respostaTexto = lumaResponse.resposta;
+        } else {
+          respostaTexto = limparRespostaIA(rawResp);
+        }
+      } catch (err) {
+        console.error('[SDR] Erro ao gerar resposta SDR:', err);
+        return true;
+      }
     }
 
     if (!respostaTexto) {
@@ -374,8 +448,14 @@ Historico resumido: ${historicoResumido}
     if (respostaTexto.trim().startsWith('{') || respostaTexto.trim().startsWith('[')) {
       console.warn('[SDR] Resposta ainda parece JSON, tentando limpar:', respostaTexto.substring(0, 100));
       respostaTexto = limparRespostaIA(respostaTexto);
-      // If still JSON after cleaning, don't send
-      if (respostaTexto.trim().startsWith('{') || respostaTexto.trim().startsWith('[')) {
+    }
+    // Final safety: strip any remaining JSON-like prefixes
+    if (respostaTexto.trim().startsWith('{') || respostaTexto.trim().startsWith('"resposta"')) {
+      // Last resort: extract anything that looks like readable text
+      const textoLimpo = respostaTexto.replace(/[{}"]/g, '').replace(/resposta\s*:/gi, '').replace(/,\s*\w+_?\w*\s*:/g, '').trim();
+      if (textoLimpo.length > 10) {
+        respostaTexto = textoLimpo;
+      } else {
         console.error('[SDR] Impossivel extrair texto da resposta JSON, nao enviando');
         return true;
       }

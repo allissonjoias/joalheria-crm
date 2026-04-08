@@ -2,6 +2,29 @@ import { useState } from 'react';
 import { CanalBadge } from './CanalBadge';
 import type { Conversa } from '../../hooks/useMensageria';
 
+// Cores variadas para avatares sem foto (estilo WhatsApp/Google)
+const AVATAR_COLORS = [
+  'bg-emerald-600', 'bg-blue-600', 'bg-purple-600', 'bg-rose-600',
+  'bg-amber-600', 'bg-cyan-600', 'bg-indigo-600', 'bg-teal-600',
+  'bg-orange-600', 'bg-pink-600', 'bg-lime-700', 'bg-fuchsia-600',
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  }
+  return name.charAt(0).toUpperCase();
+}
+
 interface ConversaItemProps {
   conversa: Conversa;
   selecionada: boolean;
@@ -10,19 +33,35 @@ interface ConversaItemProps {
 
 export function ConversaItem({ conversa, selecionada, onClick }: ConversaItemProps) {
   const nome = conversa.cliente_nome || conversa.meta_contato_nome || 'Contato';
-  const preview = conversa.ultima_mensagem
-    ? conversa.ultima_mensagem.substring(0, 55) + (conversa.ultima_mensagem.length > 55 ? '...' : '')
+  let msgPreview = conversa.ultima_mensagem || '';
+  // Extrair campo "resposta" se for JSON (respostas antigas da IA)
+  try {
+    if (msgPreview.startsWith('{')) {
+      const parsed = JSON.parse(msgPreview);
+      if (parsed.resposta) msgPreview = parsed.resposta;
+    }
+  } catch {}
+  const preview = msgPreview
+    ? msgPreview.substring(0, 55) + (msgPreview.length > 55 ? '...' : '')
     : 'Nenhuma mensagem';
 
-  const hora = conversa.ultima_msg_em
-    ? new Date(conversa.ultima_msg_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-    : '';
+  // Banco salva em localtime (Fortaleza). Extrair HH:MM direto sem conversão de timezone.
+  const hora = (() => {
+    if (!conversa.ultima_msg_em) return '';
+    const match = conversa.ultima_msg_em.match(/(\d{2}):(\d{2})/);
+    return match ? `${match[1]}:${match[2]}` : '';
+  })();
 
   const bantScore = conversa.bant_score || 0;
   const bantCor = bantScore >= 3 ? 'bg-green-500' : bantScore >= 2 ? 'bg-yellow-500' : bantScore >= 1 ? 'bg-gray-400' : '';
 
   const [imgErro, setImgErro] = useState(false);
-  const temFoto = conversa.foto_perfil && !imgErro;
+  // Considerar foto valida apenas se for URL local (/uploads) ou URL que nao seja do WhatsApp expirado
+  const fotoUrl = conversa.foto_perfil || '';
+  const fotoValida = fotoUrl && !imgErro && (fotoUrl.startsWith('/uploads') || fotoUrl.startsWith('http'));
+
+  const avatarColor = getAvatarColor(nome);
+  const initials = getInitials(nome);
 
   return (
     <button
@@ -33,16 +72,16 @@ export function ConversaItem({ conversa, selecionada, onClick }: ConversaItemPro
     >
       {/* Avatar */}
       <div className="relative w-12 h-12 flex-shrink-0">
-        {temFoto ? (
+        {fotoValida ? (
           <img
-            src={conversa.foto_perfil}
+            src={fotoUrl}
             alt={nome}
             className="w-12 h-12 rounded-full object-cover"
             onError={() => setImgErro(true)}
           />
         ) : (
-          <div className="w-12 h-12 rounded-full flex items-center justify-center bg-alisson-600">
-            <span className="text-white font-bold text-lg">{nome.charAt(0).toUpperCase()}</span>
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${avatarColor}`}>
+            <span className="text-white font-bold text-sm">{initials}</span>
           </div>
         )}
         {/* BANT badge */}

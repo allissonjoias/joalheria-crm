@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Smartphone, QrCode, Send, Zap, Shield, Play, Pause,
   XCircle, AlertCircle, CheckCircle, RefreshCw, Plus, Trash2, Wifi, WifiOff, Loader2
@@ -34,46 +34,68 @@ function InstanceCard({
 }) {
   const [qr, setQr] = useState<string | null>(null);
   const [carregandoQR, setCarregandoQR] = useState(false);
+  const onObterQRRef = useRef(onObterQR);
+  onObterQRRef.current = onObterQR;
 
-  const handleConectar = async () => {
-    onConectar(inst.id);
+  const buscarQR = async (tentativas = 30, intervalo = 1000) => {
     setCarregandoQR(true);
-    // Polling QR
-    for (let i = 0; i < 30; i++) {
-      const qrCode = await onObterQR(inst.id);
-      if (qrCode) {
-        setQr(qrCode);
-        setCarregandoQR(false);
-        break;
-      }
-      await new Promise(r => setTimeout(r, 1000));
+    for (let i = 0; i < tentativas; i++) {
+      try {
+        const qrCode = await onObterQRRef.current(inst.id);
+        if (qrCode) {
+          setQr(qrCode);
+          setCarregandoQR(false);
+          return;
+        }
+      } catch {}
+      await new Promise(r => setTimeout(r, intervalo));
     }
     setCarregandoQR(false);
   };
 
+  const handleConectar = async () => {
+    onConectar(inst.id);
+    buscarQR(30, 1000);
+  };
+
+  const handleReconectar = async () => {
+    setQr(null);
+    onConectar(inst.id);
+    buscarQR(30, 1000);
+  };
+
   // Limpar QR quando conectou
   useEffect(() => {
-    if (inst.status === 'conectado') setQr(null);
+    if (inst.status === 'conectado') {
+      setQr(null);
+      setCarregandoQR(false);
+    }
   }, [inst.status]);
 
-  // Polling QR enquanto conectando
+  // Polling QR enquanto conectando (sem onObterQR no dep array - usa ref)
   useEffect(() => {
-    if (inst.status !== 'conectando' || qr) return;
+    if (inst.status !== 'conectando' || qr || carregandoQR) return;
     let cancelled = false;
     const poll = async () => {
-      for (let i = 0; i < 20; i++) {
+      setCarregandoQR(true);
+      for (let i = 0; i < 30; i++) {
         if (cancelled) return;
-        const qrCode = await onObterQR(inst.id);
-        if (qrCode) {
-          setQr(qrCode);
-          return;
-        }
+        try {
+          const qrCode = await onObterQRRef.current(inst.id);
+          if (cancelled) return;
+          if (qrCode) {
+            setQr(qrCode);
+            setCarregandoQR(false);
+            return;
+          }
+        } catch {}
         await new Promise(r => setTimeout(r, 1500));
       }
+      if (!cancelled) setCarregandoQR(false);
     };
     poll();
     return () => { cancelled = true; };
-  }, [inst.status, inst.id, qr, onObterQR]);
+  }, [inst.status, inst.id, qr, carregandoQR]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -136,6 +158,11 @@ function InstanceCard({
         {inst.status === 'desconectado' && (
           <Button tamanho="sm" onClick={handleConectar}>
             <QrCode size={14} /> Conectar
+          </Button>
+        )}
+        {inst.status === 'conectando' && !qr && !carregandoQR && (
+          <Button tamanho="sm" onClick={handleReconectar}>
+            <RefreshCw size={14} /> Gerar QR Code
           </Button>
         )}
         {inst.status === 'conectado' && (
@@ -268,8 +295,8 @@ export default function WhatsAppPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-alisson-600 flex items-center gap-2">
+      <div className="flex items-center justify-between mb-3 md:mb-6">
+        <h1 className="hidden md:flex text-2xl font-bold text-alisson-600 items-center gap-2">
           <Smartphone size={24} /> WhatsApp
         </h1>
         <div className="flex items-center gap-2">
@@ -301,7 +328,7 @@ export default function WhatsAppPage() {
           </Button>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4 mb-4 md:mb-6">
           {instancias.map(inst => (
             <InstanceCard
               key={inst.id}
@@ -315,7 +342,7 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Anti-ban / Warmup */}
         <Card className="p-6">
           <Tooltip texto="Sistema de protecao que limita envios diarios e respeita horario comercial para evitar bloqueios do WhatsApp" posicao="right">

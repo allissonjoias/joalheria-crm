@@ -88,8 +88,8 @@ export default function Produtos() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-alisson-600">Produtos</h1>
+      <div className="flex items-center justify-between mb-3 md:mb-6">
+        <h1 className="hidden md:block text-2xl font-bold text-alisson-600">Produtos</h1>
         {isAdmin && (
           <Tooltip texto="Cadastrar uma nova joia no catalogo com foto, preco e detalhes" posicao="left">
             <Button onClick={() => { setEditando(null); setForm({ nome: '', descricao: '', categoria: 'aliancas', material: 'Ouro 18k', pedra: '', preco: '', preco_custo: '', estoque: '0' }); setModalAberto(true); }}>
@@ -99,18 +99,18 @@ export default function Produtos() {
         )}
       </div>
 
-      <div className="flex gap-4 mb-4">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-3 md:mb-4">
         <div className="flex-1 relative">
           <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produtos..." className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" />
+          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produtos..." className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm" />
         </div>
-        <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400">
+        <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="px-3 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400 text-sm">
           <option value="">Todas categorias</option>
           {CATEGORIAS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
         {produtos.map((p) => (
           <Card key={p.id} className="overflow-hidden">
             <div className="h-40 bg-gray-100 flex items-center justify-center">
@@ -158,7 +158,7 @@ export default function Produtos() {
               <textarea value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-alisson-400" rows={2} />
             </div>
           </Tooltip>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
             <Tooltip texto="Tipo de joia: aliancas, aneis, colares, brincos, pulseiras" posicao="bottom" className="w-full">
               <div className="w-full">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
@@ -171,7 +171,7 @@ export default function Produtos() {
               <Input label="Material" value={form.material} onChange={(e) => setForm({...form, material: e.target.value})} />
             </Tooltip>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
             <Tooltip texto="Pedra preciosa da peca (se houver): diamante, esmeralda, rubi" posicao="bottom" className="w-full">
               <Input label="Pedra" value={form.pedra} onChange={(e) => setForm({...form, pedra: e.target.value})} />
             </Tooltip>

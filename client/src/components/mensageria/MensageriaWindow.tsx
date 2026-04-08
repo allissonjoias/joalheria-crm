@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { Loader2, MessageSquare, MoreVertical, Target, X, ListTodo, CheckCircle, ChevronDown, Search, ChevronUp, Upload } from 'lucide-react';
+import { Loader2, MessageSquare, MoreVertical, Target, X, ListTodo, CheckCircle, ChevronDown, Search, ChevronUp, Upload, ArrowLeft, BarChart3 } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
 import { MensagemItem } from './MensagemItem';
 import { MensageriaInput } from './MensageriaInput';
@@ -67,6 +67,9 @@ interface MensageriaWindowProps {
   onEnviarMidia: (arquivo: File, caption?: string) => void;
   onToggleModoAuto: () => void;
   onExcluir?: (id: string) => void;
+  onLimparMensagens?: (id: string) => void;
+  onVoltar?: () => void;
+  onToggleSdr?: () => void;
 }
 
 // Modal para criar tarefa a partir de mensagem
@@ -230,6 +233,9 @@ export function MensageriaWindow({
   onEnviarMidia,
   onToggleModoAuto,
   onExcluir,
+  onLimparMensagens,
+  onVoltar,
+  onToggleSdr,
 }: MensageriaWindowProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -295,18 +301,29 @@ export function MensageriaWindow({
     if (e.key === 'Enter') navegarMatch(e.shiftKey ? 'anterior' : 'proximo');
   };
 
+  const estaPertoDoFundoRef = useRef(true);
+
+  // Resetar scroll ao trocar de conversa
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    estaPertoDoFundoRef.current = true;
+  }, [conversa?.id]);
+
+  useEffect(() => {
+    if (estaPertoDoFundoRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
   }, [mensagens, enviando]);
 
   const handleScroll = () => {
     const el = scrollContainerRef.current;
     if (!el) return;
     const distanciaDoFundo = el.scrollHeight - el.scrollTop - el.clientHeight;
+    estaPertoDoFundoRef.current = distanciaDoFundo < 150;
     setShowScrollBtn(distanciaDoFundo > 120);
   };
 
   const scrollParaBaixo = () => {
+    estaPertoDoFundoRef.current = true;
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
@@ -349,7 +366,7 @@ export function MensageriaWindow({
 
   return (
     <div
-      className="flex flex-col h-full relative"
+      className="flex flex-col h-full min-h-0 relative"
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -365,7 +382,16 @@ export function MensageriaWindow({
         </div>
       )}
       {/* Header estilo WhatsApp */}
-      <div className="bg-alisson-600 px-4 py-2.5 flex items-center gap-3">
+      <div className="bg-alisson-600 px-2 md:px-4 py-2.5 flex items-center gap-2 md:gap-3">
+        {/* Botao voltar - mobile only */}
+        {onVoltar && (
+          <button
+            onClick={onVoltar}
+            className="md:hidden p-1.5 rounded-full hover:bg-alisson-500 transition-colors text-white flex-shrink-0"
+          >
+            <ArrowLeft size={20} />
+          </button>
+        )}
         {/* Avatar - clicavel para expandir foto */}
         <button
           className="flex-shrink-0 rounded-full overflow-hidden focus:outline-none hover:ring-2 hover:ring-white/30 transition-all"
@@ -397,9 +423,19 @@ export function MensageriaWindow({
         </div>
 
         {/* BANT Badge + Ações */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           {conversa.bant_score !== undefined && conversa.bant_score > 0 && (
-            <BANTBadge conversa={conversa} />
+            <span className="hidden md:block"><BANTBadge conversa={conversa} /></span>
+          )}
+          {/* SDR panel toggle - mobile only */}
+          {onToggleSdr && (
+            <button
+              className="md:hidden p-2 rounded-full transition-colors hover:bg-alisson-500"
+              onClick={onToggleSdr}
+              title="Qualificacao SDR"
+            >
+              <BarChart3 size={18} className="text-creme-200" />
+            </button>
           )}
           <button
             className="p-2 rounded-full transition-colors hover:bg-alisson-500"
@@ -418,9 +454,22 @@ export function MensageriaWindow({
             </button>
             {menuAberto && (
               <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border z-50 min-w-48">
+                {onLimparMensagens && (
+                  <button
+                    className="w-full text-left px-4 py-2.5 text-sm text-orange-600 hover:bg-orange-50"
+                    onClick={() => {
+                      if (confirm('Limpar todas as mensagens desta conversa?')) {
+                        onLimparMensagens(conversa.id);
+                      }
+                      setMenuAberto(false);
+                    }}
+                  >
+                    Limpar mensagens
+                  </button>
+                )}
                 {onExcluir && (
                   <button
-                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+                    className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 rounded-b-lg"
                     onClick={() => {
                       if (confirm('Excluir conversa e resetar atendimento SDR?')) {
                         onExcluir(conversa.id);
@@ -482,11 +531,11 @@ export function MensageriaWindow({
       )}
 
       {/* Area de mensagens com fundo wallpaper WhatsApp */}
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 min-h-0 relative">
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="h-full overflow-y-auto px-16 py-4 wa-chat-bg"
+          className="absolute inset-0 overflow-y-auto px-3 md:px-16 py-4 wa-chat-bg"
         >
           {mensagens.length === 0 && (
             <div className="flex justify-center my-4">

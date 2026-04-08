@@ -11,6 +11,7 @@ router.get('/conversas', (req, res) => controller.listarConversas(req, res));
 router.post('/conversas/interna', (req, res) => controller.criarConversaInterna(req, res));
 router.get('/conversas/:id', (req, res) => controller.obterConversa(req, res));
 router.delete('/conversas/:id', (req, res) => controller.excluirConversa(req, res));
+router.delete('/conversas/:id/mensagens', (req, res) => controller.limparMensagens(req, res));
 router.post('/conversas/:id/mensagens', (req, res) => controller.enviarMensagem(req, res));
 router.post('/conversas/:id/midia', upload.single('arquivo'), (req, res) => controller.enviarMidia(req, res));
 router.put('/conversas/:id/modo-auto', (req, res) => controller.toggleModoAuto(req, res));
