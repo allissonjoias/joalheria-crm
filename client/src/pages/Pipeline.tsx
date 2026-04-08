@@ -629,7 +629,7 @@ export default function Pipeline() {
 
       {/* Modal de Brechas */}
       {mostrarBrechas && (
-        <Modal isOpen onClose={() => setMostrarBrechas(false)} titulo="Brechas no Funil" tamanho="lg">
+        <Modal aberto={true} onFechar={() => setMostrarBrechas(false)} titulo="Brechas no Funil" largura="max-w-2xl">
           <div className="space-y-2 max-h-[60vh] overflow-y-auto">
             {brechas.length === 0 && (
               <p className="text-sm text-gray-400 text-center py-8">Nenhuma brecha detectada. Tudo fluindo bem!</p>
