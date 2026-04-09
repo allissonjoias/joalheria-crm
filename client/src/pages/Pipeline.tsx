@@ -109,6 +109,13 @@ const PRIORIDADE_CORES: Record<string, string> = {
   urgente: 'bg-red-100 text-red-600',
 };
 
+interface Funil {
+  id: number;
+  nome: string;
+  cor: string;
+  ordem: number;
+}
+
 export default function Pipeline() {
   const [odvs, setOdvs] = useState<Odv[]>([]);
   const [estagios, setEstagios] = useState<Estagio[]>([]);
@@ -116,6 +123,8 @@ export default function Pipeline() {
   const [clientes, setClientes] = useState<any[]>([]);
   const [motivosPerda, setMotivosPerda] = useState<{ id: number; nome: string }[]>([]);
   const [visao, setVisao] = useState<'kanban' | 'funil'>('kanban');
+  const [funis, setFunis] = useState<Funil[]>([]);
+  const [funilAtivo, setFunilAtivo] = useState(1);
   const [origensLead, setOrigensLead] = useState<{ id: number; nome: string }[]>([]);
 
   // Modal motivo de perda
@@ -151,14 +160,18 @@ export default function Pipeline() {
   useEffect(() => {
     api.get('/funil/motivos-perda').then(({ data }) => setMotivosPerda(data)).catch(() => {});
     api.get('/funil/origens-lead').then(({ data }) => setOrigensLead(data)).catch(() => {});
-    carregar();
+    api.get('/funil/funis').then(({ data }) => setFunis(data)).catch(() => {});
   }, []);
 
-  const carregar = async () => {
+  useEffect(() => {
+    carregar(funilAtivo);
+  }, [funilAtivo]);
+
+  const carregar = async (funilId: number) => {
     try {
       const [odvsRes, estagiosRes, clientesRes, tarefasRes, statsRes, brechasRes] = await Promise.all([
-        api.get('/pipeline', { params: { funil_id: 1 } }),
-        api.get('/funil/estagios', { params: { funil_id: 1 } }),
+        api.get('/pipeline', { params: { funil_id: funilId } }),
+        api.get('/funil/estagios', { params: { funil_id: funilId } }),
         api.get('/clientes'),
         api.get('/tarefas?limite=50'),
         api.get('/tarefas/estatisticas'),
@@ -205,9 +218,9 @@ export default function Pipeline() {
       await api.put(`/pipeline/${odvId}`, { estagio: novoEstagio });
       // Recarregar para refletir auto-transicoes do ciclo de vida
       // (ex: Vendido -> auto-move para Preparando Pedido)
-      setTimeout(() => carregar(), 500);
+      setTimeout(() => carregar(funilAtivo), 500);
     } catch {
-      carregar();
+      carregar(funilAtivo);
     }
   };
 
@@ -225,7 +238,7 @@ export default function Pipeline() {
 
     setModalMotivo(null);
     setMotivoSelecionado('');
-    carregar();
+    carregar(funilAtivo);
   };
 
   const handleConfirmarEstorno = async () => {
@@ -242,7 +255,7 @@ export default function Pipeline() {
 
     setModalEstorno(null);
     setMotivoEstorno('');
-    carregar();
+    carregar(funilAtivo);
   };
 
   const handleCriarOdv = async () => {
@@ -251,11 +264,11 @@ export default function Pipeline() {
         ...formOdv,
         valor: formOdv.valor ? parseFloat(formOdv.valor) : null,
         estagio: estagios[0]?.nome || 'Lead',
-        funil_id: 1,
+        funil_id: funilAtivo,
       });
       setModalOdv(false);
       setFormOdv({ cliente_id: '', titulo: '', valor: '', produto_interesse: '', notas: '', origem_lead: '' });
-      carregar();
+      carregar(funilAtivo);
     } catch (e: any) {
       alert(e.response?.data?.erro || 'Erro ao criar ODV');
     }
@@ -264,7 +277,7 @@ export default function Pipeline() {
   const handleExcluirOdv = async (id: string) => {
     if (!confirm('Excluir esta oportunidade de venda?')) return;
     await api.delete(`/pipeline/${id}`);
-    carregar();
+    carregar(funilAtivo);
   };
 
   const handleVerHistorico = async (odvId: string) => {
@@ -279,7 +292,7 @@ export default function Pipeline() {
       await api.post('/tarefas', formTarefa);
       setModalTarefa(false);
       setFormTarefa({ pipeline_id: '', cliente_id: '', titulo: '', descricao: '', tipo: 'geral', prioridade: 'media', data_vencimento: '' });
-      carregar();
+      carregar(funilAtivo);
     } catch (e: any) {
       alert(e.response?.data?.erro || 'Erro ao criar tarefa');
     }
@@ -287,26 +300,26 @@ export default function Pipeline() {
 
   const handleConcluirTarefa = async (id: number) => {
     await api.post(`/tarefas/${id}/concluir`);
-    carregar();
+    carregar(funilAtivo);
   };
 
   const handleExcluirTarefa = async (id: number) => {
     await api.delete(`/tarefas/${id}`);
-    carregar();
+    carregar(funilAtivo);
   };
 
   // Estagios
   const handleCriarEstagio = async () => {
     if (!formEstagio.nome) return;
-    await api.post('/funil/estagios', { ...formEstagio, funil_id: 1 });
+    await api.post('/funil/estagios', { ...formEstagio, funil_id: funilAtivo });
     setFormEstagio({ nome: '', cor: '#6b7280', tipo: 'aberto' });
-    carregar();
+    carregar(funilAtivo);
   };
 
   const handleExcluirEstagio = async (id: number) => {
     try {
       await api.delete(`/funil/estagios/${id}`);
-      carregar();
+      carregar(funilAtivo);
     } catch (e: any) {
       alert(e.response?.data?.erro || 'Erro ao excluir estagio');
     }
@@ -317,44 +330,81 @@ export default function Pipeline() {
 
   // Agrupar estagios por fase para separadores visuais
   const FASE_CONFIG: Record<string, { label: string; cor: string; icone: any }> = {
-    venda: { label: 'Venda', cor: 'alisson', icone: DollarSign },
-    pos_venda: { label: 'Pos-Venda', cor: 'violet', icone: Truck },
-    nutricao: { label: 'Nutricao', cor: 'amber', icone: Heart },
-    recompra: { label: 'Recompra', cor: 'pink', icone: RefreshCw },
+    qualificacao: { label: 'Qualificacao', cor: 'indigo', icone: Target },
+    fechamento: { label: 'Fechamento', cor: 'amber', icone: DollarSign },
+    ganho: { label: 'Ganho', cor: 'green', icone: ShieldCheck },
+    logistica: { label: 'Logistica', cor: 'blue', icone: Truck },
+    sucesso: { label: 'Sucesso do Cliente', cor: 'teal', icone: Heart },
+    nutricao: { label: 'Nutricao', cor: 'purple', icone: RefreshCw },
+  };
+
+  // Cores dos pipelines para tabs
+  const PIPELINE_CORES: Record<string, string> = {
+    Leads: 'from-indigo-900 to-indigo-700',
+    Logistica: 'from-sky-900 to-sky-700',
+    Clientes: 'from-teal-800 to-teal-600',
+    Nutricao: 'from-purple-900 to-purple-700',
   };
 
   // Detectar fases unicas presentes (na ordem)
   const fasesPresentes: string[] = [];
   for (const e of estagios) {
-    const fase = e.fase || 'venda';
+    const fase = e.fase || 'qualificacao';
     if (!fasesPresentes.includes(fase)) fasesPresentes.push(fase);
   }
+
+  const funilSelecionado = funis.find(f => f.id === funilAtivo);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col p-3 md:p-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mb-3 md:mb-4">
-        <div className="flex items-center gap-2 md:gap-4">
-          <h1 className="text-lg md:text-2xl font-bold text-gray-800">Funil</h1>
-          {/* Toggle Kanban / Funil */}
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-            <button
-              onClick={() => setVisao('kanban')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                visao === 'kanban' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <LayoutGrid size={14} /> Kanban
-            </button>
-            <button
-              onClick={() => setVisao('funil')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                visao === 'funil' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Filter size={14} /> Funil
-            </button>
-          </div>
+      <div className="flex flex-col gap-2 mb-3 md:mb-4">
+        {/* Abas dos pipelines */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {funis.map(f => {
+            const totalOdvsFunil = f.id === funilAtivo ? odvs.length : 0;
+            const gradiente = PIPELINE_CORES[f.nome] || 'from-gray-700 to-gray-500';
+            return (
+              <button
+                key={f.id}
+                onClick={() => setFunilAtivo(f.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                  funilAtivo === f.id
+                    ? `bg-gradient-to-r ${gradiente} text-white shadow-md`
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+              >
+                {f.nome}
+                {funilAtivo === f.id && totalOdvsFunil > 0 && (
+                  <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded-full">{totalOdvsFunil}</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-2">
+          <div className="flex items-center gap-2 md:gap-4">
+            <h1 className="text-lg md:text-2xl font-bold text-gray-800">{funilSelecionado?.nome || 'Funil'}</h1>
+            {/* Toggle Kanban / Funil */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setVisao('kanban')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  visao === 'kanban' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <LayoutGrid size={14} /> Kanban
+              </button>
+              <button
+                onClick={() => setVisao('funil')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  visao === 'funil' ? 'bg-white shadow-sm text-gray-800' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Filter size={14} /> Funil
+              </button>
+            </div>
           {tarefaStats.vencidas > 0 && (
             <span className="flex items-center gap-1 text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">
               <AlertTriangle size={12} /> {tarefaStats.vencidas} vencida{tarefaStats.vencidas > 1 ? 's' : ''}
@@ -389,6 +439,7 @@ export default function Pipeline() {
               <Plus size={14} /> <span className="hidden sm:inline">Nova</span> ODV
             </Button>
           </Tooltip>
+        </div>
         </div>
       </div>
 
@@ -1042,7 +1093,7 @@ export default function Pipeline() {
       </Modal>
 
       {/* Modal: Motivo de Perda */}
-      <Modal aberto={!!modalMotivo} onFechar={() => { setModalMotivo(null); carregar(); }} titulo="Motivo da Perda">
+      <Modal aberto={!!modalMotivo} onFechar={() => { setModalMotivo(null); carregar(funilAtivo); }} titulo="Motivo da Perda">
         <div className="space-y-3">
           <p className="text-sm text-gray-600">Por que esta ODV foi perdida?</p>
           <div className="grid grid-cols-2 gap-2">
@@ -1061,14 +1112,14 @@ export default function Pipeline() {
             ))}
           </div>
           <div className="flex gap-2 justify-end pt-2">
-            <Button variante="secundario" onClick={() => { setModalMotivo(null); carregar(); }}>Cancelar</Button>
+            <Button variante="secundario" onClick={() => { setModalMotivo(null); carregar(funilAtivo); }}>Cancelar</Button>
             <Button onClick={handleConfirmarPerda}>Confirmar Perda</Button>
           </div>
         </div>
       </Modal>
 
       {/* Modal: Estorno / Cancelamento Pos-Venda */}
-      <Modal aberto={!!modalEstorno} onFechar={() => { setModalEstorno(null); carregar(); }} titulo="Estorno / Cancelamento">
+      <Modal aberto={!!modalEstorno} onFechar={() => { setModalEstorno(null); carregar(funilAtivo); }} titulo="Estorno / Cancelamento">
         <div className="space-y-4">
           <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-3">
             <AlertTriangle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
@@ -1111,7 +1162,7 @@ export default function Pipeline() {
           </div>
 
           <div className="flex gap-2 justify-end pt-2">
-            <Button variante="secundario" onClick={() => { setModalEstorno(null); carregar(); }}>Cancelar</Button>
+            <Button variante="secundario" onClick={() => { setModalEstorno(null); carregar(funilAtivo); }}>Cancelar</Button>
             <Button onClick={handleConfirmarEstorno}>
               Confirmar Estorno
             </Button>

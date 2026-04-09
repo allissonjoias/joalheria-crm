@@ -28,6 +28,7 @@ const MIGRATION_META_API_PATH = path.resolve(__dirname, '../models/migration_met
 const MIGRATION_AUTOMACAO_PATH = path.resolve(__dirname, '../models/migration_automacao.sql');
 const MIGRATION_MANYCHAT_PATH = path.resolve(__dirname, '../models/migration_manychat.sql');
 const MIGRATION_BRECHAS_PATH = path.resolve(__dirname, '../models/migration_brechas.sql');
+const MIGRATION_FUNIL_V2_PATH = path.resolve(__dirname, '../models/migration_funil_v2.sql');
 
 let db: SqlJsDatabase | null = null;
 
@@ -994,6 +995,43 @@ async function runAutomacaoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabas
   }
 }
 
+async function runFunilV2Migrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se ja aplicou: checar se estagio 101 (Primeiro Contato) existe
+  const jaAplicou = wrapper.prepare(
+    "SELECT id FROM funil_estagios WHERE id = 101"
+  ).get();
+
+  if (jaAplicou) return;
+
+  console.log('Rodando migration Funil V2 (18 etapas, 4 pipelines)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_FUNIL_V2_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+          console.error('Funil V2 migration error:', e.message, '\nSQL:', stmt.substring(0, 80));
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Funil V2 aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Funil V2:', e);
+  }
+}
+
 async function runBrechasMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
   const tableExists = wrapper.prepare(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='brechas_log'"
@@ -1182,6 +1220,7 @@ export function initDatabase(): Promise<DatabaseLike> {
     await runAutomacaoMigrations(wrapper, db);
     await runManyChatMigrations(wrapper, db);
     await runBrechasMigrations(wrapper, db);
+    await runFunilV2Migrations(wrapper, db);
     await runConfigGeralMigrations(wrapper, db);
     await runStickerMigration(wrapper, db);
 
