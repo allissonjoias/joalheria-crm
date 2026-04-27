@@ -108,6 +108,13 @@ async function main() {
 
   if (RESET && !DRY_RUN) {
     console.log("\n--- RESET: limpando dados migrados ---");
+    await pg.query(`DELETE FROM crm.oportunidade_historico WHERE oportunidade_id IN (SELECT id FROM crm.oportunidades WHERE metadata->>'migrated_from' = 'sqlite')`);
+    await pg.query(`DELETE FROM crm.oportunidades WHERE metadata->>'migrated_from' = 'sqlite'`);
+    await pg.query(`DELETE FROM crm.automacao_etapas WHERE legacy_id IS NOT NULL`);
+    await pg.query(`DELETE FROM crm.funil_etapas WHERE legacy_id IS NOT NULL`);
+    await pg.query(`DELETE FROM crm.funis WHERE legacy_id IS NOT NULL`);
+    await pg.query(`DELETE FROM crm.motivos_perda WHERE legacy_id IS NOT NULL`);
+    await pg.query(`DELETE FROM crm.origens_lead WHERE legacy_id IS NOT NULL`);
     await pg.query(`DELETE FROM crm.mensagens WHERE metadata->>'migrated_from' = 'sqlite'`);
     await pg.query(`DELETE FROM crm.conversas WHERE metadata->>'migrated_from' = 'sqlite'`);
     await pg.query(`DELETE FROM crm.contato_canais WHERE metadata->>'migrated_from' = 'sqlite'`);
@@ -126,6 +133,13 @@ async function main() {
     mensagens_existentes: 0,
     instagram_posts: 0,
     sdr_runs: 0,
+    funis: 0,
+    estagios: 0,
+    motivos_perda: 0,
+    origens_lead: 0,
+    automacao_etapas: 0,
+    oportunidades_novas: 0,
+    oportunidades_existentes: 0,
     erros: [],
   };
 
@@ -166,6 +180,24 @@ async function main() {
   await migrarSdrRuns(sqlite, pg, mapaConversas, DRY_RUN, stats);
 
   // ============================================================
+  // 7. PIPELINE (funis, etapas, oportunidades) — exatamente como estava
+  // ============================================================
+  console.log("\n--- 7. Funis ---");
+  const mapaFunis = await migrarFunis(sqlite, pg, DRY_RUN, stats);
+
+  console.log("\n--- 8. Estágios do Funil ---");
+  const mapaEtapas = await migrarFunilEstagios(sqlite, pg, mapaFunis, DRY_RUN, stats);
+
+  console.log("\n--- 9. Motivos de Perda + Origens de Lead ---");
+  await migrarCatalogos(sqlite, pg, DRY_RUN, stats);
+
+  console.log("\n--- 10. Oportunidades (Pipeline) — pode demorar ---");
+  await migrarPipeline(sqlite, pg, mapaClientes, mapaFunis, mapaEtapas, mapaConversas, DRY_RUN, stats);
+
+  console.log("\n--- 11. Automações de Etapas ---");
+  await migrarAutomacoesEtapas(sqlite, pg, mapaFunis, mapaEtapas, DRY_RUN, stats);
+
+  // ============================================================
   // SUMÁRIO
   // ============================================================
   console.log("\n=== SUMÁRIO ===");
@@ -178,6 +210,13 @@ async function main() {
   console.log(`  mensagens existentes:  ${stats.mensagens_existentes}`);
   console.log(`  instagram_posts:       ${stats.instagram_posts}`);
   console.log(`  sdr_runs:              ${stats.sdr_runs}`);
+  console.log(`  funis:                 ${stats.funis}`);
+  console.log(`  funil_estagios:        ${stats.estagios}`);
+  console.log(`  motivos_perda:         ${stats.motivos_perda}`);
+  console.log(`  origens_lead:          ${stats.origens_lead}`);
+  console.log(`  oportunidades novas:   ${stats.oportunidades_novas}`);
+  console.log(`  oportunidades exist.:  ${stats.oportunidades_existentes}`);
+  console.log(`  automacao_etapas:      ${stats.automacao_etapas}`);
   console.log(`  erros:                 ${stats.erros.length}`);
 
   if (stats.erros.length > 0) {
@@ -614,6 +653,337 @@ async function migrarSdrRuns(sqlite, pg, mapaConversas, dryRun, stats) {
     }
   }
   log(`${stats.sdr_runs} sdr_runs migrados`);
+}
+
+// ============================================================
+// FUNIS (sqlite.funis → crm.funis)
+// ============================================================
+async function migrarFunis(sqlite, pg, dryRun, stats) {
+  const mapa = {}; // sqlite.id (int) → postgres.id (uuid)
+  const funis = sqlite.prepare(`SELECT * FROM funis ORDER BY ordem`).all();
+
+  for (const f of funis) {
+    try {
+      if (!dryRun) {
+        const r = await pg.query(
+          `INSERT INTO crm.funis (legacy_id, nome, descricao, cor, ordem, ativo)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (legacy_id) DO UPDATE SET
+             nome = EXCLUDED.nome,
+             descricao = EXCLUDED.descricao,
+             cor = EXCLUDED.cor,
+             ordem = EXCLUDED.ordem,
+             ativo = EXCLUDED.ativo
+           RETURNING id`,
+          [f.id, f.nome, f.descricao, f.cor || "#184036", f.ordem || 1, !!f.ativo]
+        );
+        mapa[f.id] = r.rows[0].id;
+        stats.funis++;
+      } else {
+        mapa[f.id] = `dry-funil-${f.id}`;
+        log(`[dry] funil: id=${f.id} "${f.nome}" ativo=${f.ativo}`);
+      }
+    } catch (e) {
+      stats.erros.push(`funil "${f.nome}": ${e.message}`);
+    }
+  }
+  log(`${stats.funis} funis migrados`);
+  return mapa;
+}
+
+// ============================================================
+// FUNIL ESTAGIOS (sqlite.funil_estagios → crm.funil_etapas)
+// ============================================================
+async function migrarFunilEstagios(sqlite, pg, mapaFunis, dryRun, stats) {
+  const mapa = {}; // sqlite.id (int) → postgres.id (uuid)
+  const estagios = sqlite.prepare(`SELECT * FROM funil_estagios ORDER BY funil_id, ordem`).all();
+
+  // Garante que tem pelo menos 1 bloco por funil (pra FK não quebrar)
+  // Cria um bloco "Default" por funil migrado se necessário
+  const blocosPorFunil = {}; // legacy_funil_id → bloco_id (uuid)
+
+  for (const e of estagios) {
+    try {
+      const funilId = mapaFunis[e.funil_id];
+      if (!funilId) {
+        stats.erros.push(`estagio "${e.nome}" funil ${e.funil_id} não mapeado`);
+        continue;
+      }
+
+      // Garante bloco
+      let blocoId = blocosPorFunil[e.funil_id];
+      if (!blocoId && !dryRun) {
+        const blocoNome = e.bloco || "Default";
+        const existe = await pg.query(
+          `SELECT id FROM crm.funil_blocos WHERE nome = $1 LIMIT 1`,
+          [blocoNome]
+        );
+        if (existe.rows.length > 0) {
+          blocoId = existe.rows[0].id;
+        } else {
+          const novo = await pg.query(
+            `INSERT INTO crm.funil_blocos (nome, ordem, cor) VALUES ($1, $2, $3) RETURNING id`,
+            [blocoNome, e.funil_id || 1, "#184036"]
+          );
+          blocoId = novo.rows[0].id;
+        }
+        blocosPorFunil[e.funil_id] = blocoId;
+      }
+
+      if (!dryRun) {
+        const r = await pg.query(
+          `INSERT INTO crm.funil_etapas (legacy_id, bloco_id, funil_id, nome, ordem, cor, ativo, tipo, fase)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (legacy_id) DO UPDATE SET
+             nome = EXCLUDED.nome,
+             ordem = EXCLUDED.ordem,
+             cor = EXCLUDED.cor,
+             tipo = EXCLUDED.tipo,
+             fase = EXCLUDED.fase
+           RETURNING id`,
+          [
+            e.id,
+            blocoId,
+            funilId,
+            e.nome,
+            e.ordem || 0,
+            e.cor || "#9ca3af",
+            e.ativo === null ? true : !!e.ativo,
+            e.tipo || "aberto",
+            e.fase,
+          ]
+        );
+        mapa[e.id] = r.rows[0].id;
+        stats.estagios++;
+      } else {
+        mapa[e.id] = `dry-etapa-${e.id}`;
+        if (stats.estagios < 3) log(`[dry] estagio: ${e.nome} (funil ${e.funil_id})`);
+        stats.estagios++;
+      }
+    } catch (err) {
+      stats.erros.push(`estagio "${e.nome}": ${err.message}`);
+    }
+  }
+  log(`${stats.estagios} estágios migrados`);
+  return mapa;
+}
+
+// ============================================================
+// CATÁLOGOS (motivos_perda, origens_lead)
+// ============================================================
+async function migrarCatalogos(sqlite, pg, dryRun, stats) {
+  for (const tabela of ["motivos_perda", "origens_lead"]) {
+    const itens = sqlite.prepare(`SELECT * FROM ${tabela}`).all();
+    for (const it of itens) {
+      try {
+        if (!dryRun) {
+          await pg.query(
+            `INSERT INTO crm.${tabela} (legacy_id, nome, ativo, ordem)
+             VALUES ($1,$2,$3,$4)
+             ON CONFLICT (legacy_id) DO UPDATE SET nome = EXCLUDED.nome`,
+            [it.id, it.nome, !!it.ativo, it.ordem || 1]
+          );
+        }
+        stats[tabela]++;
+      } catch (e) {
+        stats.erros.push(`${tabela} ${it.nome}: ${e.message}`);
+      }
+    }
+    log(`${stats[tabela]} ${tabela} migrados`);
+  }
+}
+
+// ============================================================
+// PIPELINE → crm.oportunidades (13.263 linhas — pode demorar)
+// ============================================================
+async function migrarPipeline(sqlite, pg, mapaClientes, mapaFunis, mapaEtapas, mapaConversas, dryRun, stats) {
+  const odvs = sqlite.prepare(`SELECT * FROM pipeline ORDER BY criado_em`).all();
+
+  // Cache: nome do estágio + funil_id_legacy → etapa_id postgres
+  const cacheEstagio = {};
+  const buscarEtapaIdPorNome = (estagioNome, funilLegacyId) => {
+    const key = `${funilLegacyId}::${estagioNome}`;
+    if (cacheEstagio[key] !== undefined) return cacheEstagio[key];
+
+    // Busca em mapaEtapas: precisamos achar o que tem nome = estagioNome E funil_id (legacy) = funilLegacyId
+    // mapaEtapas é { sqlite_id: postgres_uuid }, mas precisamos olhar pelo nome no SQLite.
+    // Solução: buscar no SQLite o id pelo nome+funil_id e converter.
+    return null; // será resolvido em batch (vide abaixo)
+  };
+
+  // Resolve nome do estágio → uuid via SQLite + mapaEtapas
+  const estagiosSqlite = sqlite.prepare(`SELECT id, nome, funil_id FROM funil_estagios`).all();
+  const nomeFunilParaIdSqlite = {};
+  estagiosSqlite.forEach(e => {
+    nomeFunilParaIdSqlite[`${e.funil_id}::${e.nome}`] = e.id;
+  });
+
+  function resolverEtapaId(estagioNome, funilLegacyId) {
+    const sqliteId = nomeFunilParaIdSqlite[`${funilLegacyId}::${estagioNome}`];
+    if (!sqliteId) return null;
+    return mapaEtapas[sqliteId] || null;
+  }
+
+  let processados = 0;
+  for (const o of odvs) {
+    try {
+      processados++;
+      if (processados % 1000 === 0) console.log(`  progresso: ${processados}/${odvs.length}`);
+
+      // Resolve cliente
+      const contatoId = mapaClientes[o.cliente_id];
+      if (!contatoId) {
+        stats.erros.push(`oport ${o.id}: cliente ${o.cliente_id} não mapeado`);
+        continue;
+      }
+
+      // Resolve funil
+      const funilId = mapaFunis[o.funil_id || 1];
+      if (!funilId) {
+        stats.erros.push(`oport ${o.id}: funil ${o.funil_id} não mapeado`);
+        continue;
+      }
+
+      // Resolve etapa pelo nome
+      const etapaId = resolverEtapaId(o.estagio, o.funil_id || 1);
+
+      // Resolve conversa (pode ter)
+      const conversaId = o.conversa_id ? mapaConversas[o.conversa_id] : null;
+
+      if (!dryRun) {
+        // Idempotência: verifica se já foi migrada
+        const exist = await pg.query(
+          `SELECT id FROM crm.oportunidades WHERE legacy_id = $1`,
+          [o.id]
+        );
+        if (exist.rows.length > 0) {
+          stats.oportunidades_existentes++;
+          continue;
+        }
+
+        await pg.query(
+          `INSERT INTO crm.oportunidades (
+             legacy_id, contato_id, vendedor_id, funil_id, etapa_id, conversa_id,
+             titulo, valor, produto_interesse, notas,
+             tags, origem_lead, motivo_perda, tipo_pedido, forma_atendimento,
+             tipo_cliente, itens_pedido, desconto, parcelas, forma_pagamento,
+             valor_frete, endereco_entrega, data_prevista_entrega, data_envio,
+             transportador, observacao_pedido, campos_ia,
+             score_bant, classificacao, canal_origem, perfil, decisor,
+             orcamento_declarado, ocasiao, prazo, opt_out, opt_out_data,
+             tentativas_reabordagem, forma_envio, codigo_rastreio, data_entrega,
+             entrega_confirmada, motivo_pos_venda, data_entrada_pos_venda,
+             metadata, created_at, updated_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+             $11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+             $21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47
+           )`,
+          [
+            o.id, contatoId, null /*vendedor — não mapeado, NULL*/,
+            funilId, etapaId, (conversaId && !String(conversaId).startsWith("dry-")) ? conversaId : null,
+            o.titulo || "(sem título)", o.valor, o.produto_interesse, o.notas,
+            o.tags ? safeJson(o.tags, "[]") : "[]",
+            o.origem_lead, o.motivo_perda, o.tipo_pedido, o.forma_atendimento,
+            o.tipo_cliente, o.itens_pedido ? safeJson(o.itens_pedido, null) : null,
+            o.desconto, o.parcelas, o.forma_pagamento,
+            o.valor_frete, o.endereco_entrega, parseDate(o.data_prevista_entrega), parseDate(o.data_envio),
+            o.transportador, o.observacao_pedido,
+            o.campos_ia ? safeJson(o.campos_ia, "[]") : "[]",
+            o.score_bant, o.classificacao, o.canal_origem, o.perfil, o.decisor,
+            o.orcamento_declarado, o.ocasiao, o.prazo, !!o.opt_out, parseTimestamp(o.opt_out_data),
+            o.tentativas_reabordagem || 0, o.forma_envio, o.codigo_rastreio, parseDate(o.data_entrega),
+            !!o.entrega_confirmada, o.motivo_pos_venda, parseTimestamp(o.data_entrada_pos_venda),
+            JSON.stringify({ migrated_from: "sqlite", legacy_id: o.id }),
+            o.criado_em, o.atualizado_em || o.criado_em,
+          ]
+        );
+        stats.oportunidades_novas++;
+      } else {
+        if (stats.oportunidades_novas < 3) {
+          log(`[dry] odv: ${o.titulo || o.id} cliente=${contatoId} funil=${funilId} etapa=${etapaId || "?"}`);
+        }
+        stats.oportunidades_novas++;
+      }
+    } catch (err) {
+      stats.erros.push(`oport ${o.id}: ${err.message}`);
+    }
+  }
+
+  log(`${stats.oportunidades_novas} novas + ${stats.oportunidades_existentes} já migradas`);
+}
+
+// ============================================================
+// AUTOMAÇÕES DE ETAPAS
+// ============================================================
+async function migrarAutomacoesEtapas(sqlite, pg, mapaFunis, mapaEtapas, dryRun, stats) {
+  let auts = [];
+  try { auts = sqlite.prepare(`SELECT * FROM automacao_etapas`).all(); }
+  catch { return; }
+
+  // Estágios do SQLite por nome → uuid no postgres (similar à pipeline)
+  const estagios = sqlite.prepare(`SELECT id, nome, funil_id FROM funil_estagios`).all();
+  const nomeFunilParaSqliteId = {};
+  estagios.forEach(e => { nomeFunilParaSqliteId[`${e.funil_id}::${e.nome}`] = e.id; });
+
+  for (const a of auts) {
+    try {
+      const funilLegacy = a.funil_id || 10;
+      const origemSqlite = a.estagio_origem ? nomeFunilParaSqliteId[`${funilLegacy}::${a.estagio_origem}`] : null;
+      const destinoSqlite = a.estagio_destino ? nomeFunilParaSqliteId[`${funilLegacy}::${a.estagio_destino}`] : null;
+      const origemId = origemSqlite ? mapaEtapas[origemSqlite] : null;
+      const destinoId = destinoSqlite ? mapaEtapas[destinoSqlite] : null;
+      const funilId = mapaFunis[funilLegacy];
+
+      if (!dryRun) {
+        await pg.query(
+          `INSERT INTO crm.automacao_etapas (
+             legacy_id, funil_id, gatilho, estagio_origem_id, estagio_destino_id,
+             tipo_acao, config, descricao, ativo
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+           ON CONFLICT (legacy_id) DO UPDATE SET ativo = EXCLUDED.ativo`,
+          [
+            a.id, funilId, a.gatilho || "ao_entrar_etapa",
+            origemId, destinoId,
+            a.tipo_acao || "mover_estagio",
+            a.config ? safeJson(a.config, "{}") : "{}",
+            a.descricao,
+            a.ativo === null ? true : !!a.ativo,
+          ]
+        );
+      }
+      stats.automacao_etapas++;
+    } catch (e) {
+      stats.erros.push(`automacao_etapas ${a.id}: ${e.message}`);
+    }
+  }
+  log(`${stats.automacao_etapas} automações migradas`);
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+function safeJson(value, fallback) {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === "object") return JSON.stringify(value);
+  if (typeof value === "string") {
+    try { JSON.parse(value); return value; } catch { return fallback; }
+  }
+  return fallback;
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().substring(0, 10);
+}
+
+function parseTimestamp(s) {
+  if (!s) return null;
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
 }
 
 // ============================================================

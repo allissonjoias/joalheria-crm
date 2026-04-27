@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, LogIn } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+
+const LS_EMAIL = "crm.login.email";
 
 export function LoginForm() {
   const router = useRouter();
@@ -12,8 +14,15 @@ export function LoginForm() {
 
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
+  const [lembrar, setLembrar] = useState(true);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+
+  // Pré-preenche email do último login
+  useEffect(() => {
+    const salvo = typeof window !== "undefined" ? localStorage.getItem(LS_EMAIL) : null;
+    if (salvo) setEmail(salvo);
+  }, []);
 
   async function entrar(e: React.FormEvent) {
     e.preventDefault();
@@ -36,6 +45,10 @@ export function LoginForm() {
       return;
     }
 
+    // Lembra o email pra próxima vez
+    if (lembrar) localStorage.setItem(LS_EMAIL, email);
+    else localStorage.removeItem(LS_EMAIL);
+
     router.push(next);
     router.refresh();
   }
@@ -50,35 +63,52 @@ export function LoginForm() {
           <p className="mt-3 text-sm text-alisson-700">Entrar com sua conta</p>
         </div>
 
-        <form onSubmit={entrar} className="card space-y-4">
+        <form onSubmit={entrar} className="card space-y-4" autoComplete="on">
           <div>
-            <label className="block text-xs font-medium text-alisson-700 mb-1">
+            <label htmlFor="email" className="block text-xs font-medium text-alisson-700 mb-1">
               Email
             </label>
             <input
+              id="email"
+              name="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              autoFocus
+              autoFocus={!email}
+              autoComplete="username email"
               className="input-field"
               placeholder="seu@email.com"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-alisson-700 mb-1">
+            <label htmlFor="senha" className="block text-xs font-medium text-alisson-700 mb-1">
               Senha
             </label>
             <input
+              id="senha"
+              name="password"
               type="password"
               value={senha}
               onChange={(e) => setSenha(e.target.value)}
               required
+              autoFocus={!!email}
+              autoComplete="current-password"
               className="input-field"
               placeholder="••••••••"
             />
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-alisson-700 select-none">
+            <input
+              type="checkbox"
+              checked={lembrar}
+              onChange={(e) => setLembrar(e.target.checked)}
+              className="rounded border-alisson-300 text-alisson-600 focus:ring-alisson-500"
+            />
+            Lembrar meu login neste dispositivo
+          </label>
 
           {erro && (
             <div className="p-3 rounded-lg bg-red-50 text-red-700 text-sm">
