@@ -27,9 +27,11 @@ import distribuicaoRoutes from './routes/distribuicao.routes';
 import instagramRoutes from './routes/instagram.routes';
 import metaApiRoutes from './routes/meta-api.routes';
 import automacaoRoutes from './routes/automacao.routes';
+import automacaoEtapasRoutes from './routes/automacao-etapas.routes';
 import configGeralRoutes from './routes/config-geral.routes';
-import manychatRoutes from './routes/manychat.routes';
 import brechasRoutes, { mercadoPagoWebhookRouter } from './routes/brechas.routes';
+import unipileRoutes from './routes/unipile.routes';
+import { UnipileController } from './controllers/unipile.controller';
 import { WhatsAppController } from './controllers/whatsapp.controller';
 import { EvolutionService } from './services/evolution.service';
 import { sdrScheduler } from './services/sdr-scheduler.service';
@@ -76,8 +78,21 @@ app.use('/api/webhook', webhookRoutes);
 const whatsappCtrl = new WhatsAppController();
 app.post('/api/whatsapp/webhook/receive', (req, res) => whatsappCtrl.receberWebhook(req, res));
 
-// ManyChat webhook (publico) + config (protegido internamente no router)
-app.use('/api/manychat', manychatRoutes);
+// Webhook Unipile (publico - sem auth)
+// A Unipile envia Content-Type: application/x-www-form-urlencoded mas body em JSON
+// usamos express.text para capturar bruto e parsear manualmente
+const unipileCtrl = new UnipileController();
+app.post(
+  '/api/unipile/webhook',
+  express.text({ type: '*/*', limit: '5mb' }),
+  (req, res, next) => {
+    if (typeof req.body === 'string' && req.body.length) {
+      try { req.body = JSON.parse(req.body); } catch { /* deixa string */ }
+    }
+    next();
+  },
+  (req, res) => unipileCtrl.receberWebhook(req, res)
+);
 
 // Mercado Pago webhook (publico - sem auth)
 app.use('/api/mercadopago', mercadoPagoWebhookRouter);
@@ -110,8 +125,10 @@ app.use('/api/performance', authMiddleware, performanceRoutes);
 app.use('/api/distribuicao', authMiddleware, distribuicaoRoutes);
 app.use('/api/meta-api', authMiddleware, metaApiRoutes);
 app.use('/api/automacao', authMiddleware, automacaoRoutes);
+app.use('/api/automacao-etapas', authMiddleware, automacaoEtapasRoutes);
 app.use('/api/config-geral', authMiddleware, configGeralRoutes);
 app.use('/api/brechas', authMiddleware, brechasRoutes);
+app.use('/api/unipile', authMiddleware, unipileRoutes);
 
 // Em producao, servir o frontend buildado
 if (process.env.NODE_ENV === 'production') {
@@ -119,6 +136,12 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(clientDist));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  // Em dev, redirecionar acessos diretos ao backend para o frontend Vite
+  app.get('/', (req, res) => {
+    const host = (req.headers.host || 'localhost:3001').split(':')[0];
+    res.redirect(`http://${host}:5174/`);
   });
 }
 

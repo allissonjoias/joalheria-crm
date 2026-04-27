@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { Check, CheckCheck, Eye, AlertCircle, ListTodo, ChevronDown, FileText, Download } from 'lucide-react';
-import type { Mensagem } from '../../hooks/useMensageria';
+import type { Mensagem, InstagramPostInfo } from '../../hooks/useMensageria';
+import { PublicacaoInline } from './PublicacaoInline';
 
 interface MensagemItemProps {
   mensagem: Mensagem;
   onCriarTarefa?: (mensagem: Mensagem) => void;
   termoBusca?: string;
+  instagramPost?: InstagramPostInfo | null;
+  nomeCliente?: string;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -68,7 +71,7 @@ function TextoComDestaque({ texto, termo }: { texto: string; termo?: string }) {
   );
 }
 
-export function MensagemItem({ mensagem, onCriarTarefa, termoBusca }: MensagemItemProps) {
+export function MensagemItem({ mensagem, onCriarTarefa, termoBusca, instagramPost, nomeCliente }: MensagemItemProps) {
   const [hover, setHover] = useState(false);
   const [menuAberto, setMenuAberto] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -121,6 +124,15 @@ export function MensagemItem({ mensagem, onCriarTarefa, termoBusca }: MensagemIt
         >
           <ListTodo size={14} className="text-alisson-600" />
         </button>
+      )}
+      <div className={`flex flex-col ${isAssistant ? 'items-end' : 'items-start'}`}>
+      {/* Banner inline da publicação acima da bolha (estilo Instagram DM) */}
+      {instagramPost && (
+        <PublicacaoInline
+          post={instagramPost}
+          canalOrigem={mensagem.canal_origem}
+          align={isAssistant ? 'right' : 'left'}
+        />
       )}
       <div
         className={`relative max-w-[85%] md:max-w-[65%] rounded-lg ${
@@ -187,7 +199,9 @@ export function MensagemItem({ mensagem, onCriarTarefa, termoBusca }: MensagemIt
 
         {/* Nome do remetente */}
         {mensagem.tipo_midia !== 'sticker' && !isAssistant && (
-          <p className="text-xs font-medium text-alisson-600 mb-0.5">Cliente</p>
+          <p className="text-xs font-medium text-alisson-600 mb-0.5 truncate max-w-[260px]">
+            {nomeCliente?.trim() || 'Cliente'}
+          </p>
         )}
         {mensagem.tipo_midia !== 'sticker' && isAssistant && (
           <p className="text-xs font-medium text-alisson-400 mb-0.5">Agente IA - Alisson</p>
@@ -269,6 +283,7 @@ export function MensagemItem({ mensagem, onCriarTarefa, termoBusca }: MensagemIt
             )}
           </div>
         )}
+      </div>
       </div>
       {/* Botao criar tarefa - lado direito para mensagens do cliente */}
       {!isAssistant && hover && onCriarTarefa && (

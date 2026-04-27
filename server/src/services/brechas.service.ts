@@ -568,6 +568,263 @@ export class BrechasService {
     }
   }
 
+  // ─── Automações avançadas ──────────────────────────────────────────
+
+  /**
+   * AUTOMACAO: Reconciliação Mercado Pago.
+   * Verifica pagamentos aprovados que o webhook não capturou.
+   * CRON: a cada 30 minutos.
+   */
+  async reconciliarPagamentosMP(): Promise<number> {
+    const db = getDb();
+    const config = this.obterConfigMP() as any;
+    if (!config?.ativo || !config?.access_token) return 0;
+
+    // Buscar ODVs aguardando pagamento há mais de 10 minutos
+    const pendentes = db.prepare(`
+      SELECT id, cliente_id, titulo, valor FROM pipeline
+      WHERE estagio = 'Aguardando Pagamento'
+        AND datetime(atualizado_em) < datetime('now', '-10 minutes')
+      LIMIT 20
+    `).all() as any[];
+
+    let reconciliados = 0;
+
+    for (const odv of pendentes) {
+      try {
+        // Buscar pagamentos no MP por external_reference
+        const resp = await fetch(
+          `https://api.mercadopago.com/v1/payments/search?external_reference=${odv.id}&status=approved&limit=1`,
+          { headers: { 'Authorization': `Bearer ${config.access_token}` } }
+        );
+
+        if (!resp.ok) continue;
+        const data = await resp.json() as any;
+
+        if (data.results?.length > 0) {
+          const pgto = data.results[0];
+          // Verificar se já processamos esse pagamento
+          const jaProcessado = db.prepare(
+            "SELECT id FROM mercadopago_pagamentos WHERE payment_id = ?"
+          ).get(String(pgto.id));
+
+          if (!jaProcessado) {
+            this.processarGanho(odv.id, String(pgto.id), pgto.transaction_amount,
+              pgto.payment_method_id, pgto.installments);
+            this.agendarFollowupsColetaEnvio(odv.id);
+
+            this.registrarBrecha(odv.id, odv.cliente_id, 'pagamento_pendente',
+              `Pagamento reconciliado automaticamente: R$ ${pgto.transaction_amount} (webhook falhou)`,
+              'Reconciliação automática MP'
+            );
+
+            reconciliados++;
+            console.log(`[RECONCILIACAO MP] Pagamento encontrado para ODV ${odv.id}: R$ ${pgto.transaction_amount}`);
+          }
+        }
+      } catch (e: any) {
+        console.error(`[RECONCILIACAO MP] Erro ao verificar ODV ${odv.id}:`, e.message);
+      }
+    }
+
+    if (reconciliados > 0) {
+      saveDb();
+      console.log(`[RECONCILIACAO MP] ${reconciliados} pagamentos reconciliados`);
+    }
+
+    return reconciliados;
+  }
+
+  /**
+   * AUTOMACAO: Follow-ups automáticos de coleta/envio via WhatsApp.
+   * Envia mensagens quando o cliente não responde sobre entrega.
+   * CRON: a cada 5 minutos.
+   */
+  async processarFollowupsAuto(): Promise<number> {
+    const db = getDb();
+
+    // Buscar follow-ups pendentes que já passaram do horário
+    const pendentes = db.prepare(`
+      SELECT f.*, p.cliente_id, c.nome as cliente_nome, c.telefone
+      FROM followups_auto f
+      JOIN pipeline p ON p.id = f.pipeline_id
+      LEFT JOIN clientes c ON c.id = p.cliente_id
+      WHERE f.enviado = 0 AND f.cancelado = 0
+        AND datetime(f.agendar_para) <= datetime('now', 'localtime')
+      LIMIT 10
+    `).all() as any[];
+
+    let enviados = 0;
+
+    for (const fu of pendentes) {
+      // Verificar se lead já respondeu (etapa mudou de Coleta de Envio)
+      const odvAtual = db.prepare('SELECT estagio FROM pipeline WHERE id = ?').get(fu.pipeline_id) as any;
+      if (odvAtual && odvAtual.estagio !== 'Aguardando Envio') {
+        // Cancelar todos os follow-ups desta ODV
+        db.prepare(
+          "UPDATE followups_auto SET cancelado = 1 WHERE pipeline_id = ? AND enviado = 0"
+        ).run(fu.pipeline_id);
+        continue;
+      }
+
+      // Personalizar mensagem com nome
+      const msg = fu.mensagem.replace('[Nome]', fu.cliente_nome || 'Cliente');
+
+      // Tentar enviar via Evolution API
+      if (fu.telefone) {
+        try {
+          await this.enviarWhatsApp(fu.telefone, msg);
+          enviados++;
+        } catch (e: any) {
+          console.error(`[FOLLOWUP] Erro ao enviar WhatsApp para ${fu.telefone}:`, e.message);
+        }
+      }
+
+      // Marcar como enviado
+      db.prepare(
+        "UPDATE followups_auto SET enviado = 1, enviado_em = datetime('now', 'localtime') WHERE id = ?"
+      ).run(fu.id);
+    }
+
+    if (enviados > 0) {
+      saveDb();
+      console.log(`[FOLLOWUP] ${enviados} follow-ups enviados`);
+    }
+
+    return enviados;
+  }
+
+  /**
+   * AUTOMACAO: Agendar follow-ups automáticos via WhatsApp para coleta de envio.
+   */
+  agendarFollowupsAutoWhatsApp(odvId: string): void {
+    const db = getDb();
+    const odv = db.prepare('SELECT * FROM pipeline WHERE id = ?').get(odvId) as any;
+    if (!odv) return;
+
+    const cliente = db.prepare('SELECT nome FROM clientes WHERE id = ?').get(odv.cliente_id) as any;
+    const nome = cliente?.nome || 'Cliente';
+
+    const followups = [
+      { tipo: '2h', horas: 2, mensagem: `[Nome], só preciso do endereço pra enviar sua peça. Me passa aqui que já encaminho! 💎` },
+      { tipo: '24h', horas: 24, mensagem: `[Nome], sua peça já está sendo preparada! Me passa o endereço pra gente enviar? 📦` },
+      { tipo: '48h', horas: 48, mensagem: `[Nome], sua joia tá pronta. Só falta o endereço pra finalizar o envio. ✨` },
+    ];
+
+    for (const fu of followups) {
+      db.prepare(`
+        INSERT INTO followups_auto (pipeline_id, tipo, mensagem, agendar_para, criado_em)
+        VALUES (?, ?, ?, datetime('now', 'localtime', '+${fu.horas} hours'), datetime('now', 'localtime'))
+      `).run(odvId, fu.tipo, fu.mensagem);
+    }
+
+    saveDb();
+    console.log(`[FOLLOWUP] 3 follow-ups WhatsApp agendados para ODV ${odvId}`);
+  }
+
+  /**
+   * AUTOMACAO: Verificar limite de reabordagem.
+   * Se lead está na qualificação BANT com score < 70% e já tentou 3x, move para perdidos.
+   */
+  verificarLimiteReabordagem(odvId: string): 'reabordar' | 'perdido' | null {
+    const db = getDb();
+    const odv = db.prepare('SELECT * FROM pipeline WHERE id = ?').get(odvId) as any;
+    if (!odv) return null;
+
+    if (odv.estagio !== 'BANT' || (odv.score_bant || 0) >= 70) return null;
+
+    const tentativas = (odv.tentativas_reabordagem || 0) + 1;
+    db.prepare(
+      "UPDATE pipeline SET tentativas_reabordagem = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
+    ).run(tentativas, odvId);
+
+    if (tentativas >= 3) {
+      // Mover para perdidos
+      db.prepare(
+        "UPDATE pipeline SET estagio = 'Perdido', motivo_perda = 'Não qualificou após 3 tentativas', atualizado_em = datetime('now', 'localtime') WHERE id = ?"
+      ).run(odvId);
+
+      db.prepare(
+        "INSERT INTO pipeline_historico (id, pipeline_id, estagio_anterior, estagio_novo, automatico, motivo, criado_em) VALUES (?, ?, 'BANT', 'Perdido', 1, 'Não qualificou após 3 tentativas', datetime('now', 'localtime'))"
+      ).run(uuidv4(), odvId);
+
+      this.agendarNutricao(odvId, 'perdidos');
+      saveDb();
+      return 'perdido';
+    }
+
+    saveDb();
+    return 'reabordar';
+  }
+
+  /**
+   * AUTOMACAO: Processar opt-out completo.
+   * Remove de toda nutrição, cancela follow-ups, marca opt-out.
+   */
+  processarOptOut(odvId: string): void {
+    const db = getDb();
+
+    // Cancelar follow-ups
+    db.prepare(
+      "UPDATE followups_auto SET cancelado = 1 WHERE pipeline_id = ? AND enviado = 0"
+    ).run(odvId);
+
+    // Cancelar nutrição
+    db.prepare(
+      "UPDATE ciclo_vida_agendamentos SET status = 'cancelado' WHERE pipeline_id = ? AND status = 'pendente'"
+    ).run(odvId);
+
+    // Marcar opt-out na pipeline
+    db.prepare(
+      "UPDATE pipeline SET opt_out = 1, opt_out_data = datetime('now', 'localtime'), atualizado_em = datetime('now', 'localtime') WHERE id = ?"
+    ).run(odvId);
+
+    saveDb();
+    console.log(`[OPT-OUT] ODV ${odvId} marcada como opt-out`);
+  }
+
+  // ─── Helper: Enviar WhatsApp via Evolution API ────────────────────
+
+  private async enviarWhatsApp(telefone: string, mensagem: string): Promise<void> {
+    const db = getDb();
+    // Buscar config da Evolution API
+    const config = db.prepare(
+      "SELECT valor FROM config_geral WHERE chave IN ('evolution_api_url', 'evolution_api_key', 'evolution_instance')"
+    ).all() as any[];
+
+    const configMap: Record<string, string> = {};
+    for (const c of config) {
+      // config_geral tem chave/valor
+    }
+
+    // Buscar de evolution_config
+    const evoConfig = db.prepare(
+      "SELECT api_url, api_key, instance_name FROM evolution_config WHERE ativo = 1 LIMIT 1"
+    ).get() as any;
+
+    if (!evoConfig?.api_url || !evoConfig?.api_key || !evoConfig?.instance_name) {
+      console.warn('[WHATSAPP] Evolution API não configurada');
+      return;
+    }
+
+    const url = `${evoConfig.api_url}/message/sendText/${evoConfig.instance_name}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': evoConfig.api_key,
+      },
+      body: JSON.stringify({
+        number: telefone.replace(/\D/g, ''),
+        text: mensagem,
+      }),
+    });
+
+    if (!resp.ok) {
+      throw new Error(`Evolution API error: ${resp.status}`);
+    }
+  }
+
   // ─── Métodos privados ──────────────────────────────────────────────
 
   private registrarBrecha(pipelineId: string | null, clienteId: string, tipo: string, descricao: string, acao: string): string {

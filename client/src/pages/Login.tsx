@@ -4,8 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 
 export default function Login() {
   const { login, usuario } = useAuth();
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
+  const [email, setEmail] = useState('admin@alisson.com');
+  const [senha, setSenha] = useState('admin123');
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
 

@@ -30,12 +30,20 @@ export interface InstagramDMMessage {
   text?: string;
   attachmentUrl?: string;
   attachmentType?: string;
+  // Quando a DM é resposta a um story/post (Meta envia reply_to)
+  replyToMediaId?: string;
+  replyToType?: 'story' | 'post';
+  // Campos opcionais quando vem via Unipile (evita lookup Graph API)
+  senderName?: string;
+  senderUsername?: string;
+  senderProfilePicUrl?: string;
 }
 
 export interface InstagramCommentEvent {
   type: 'instagram_comment';
   commentId: string;
   mediaId: string;
+  mediaProductType?: string;
   senderId: string;
   senderUsername: string;
   text: string;
@@ -134,6 +142,7 @@ export class WebhookService {
           if (msg.message?.is_echo || msg.message_edit) continue;
 
           if (msg.message) {
+            const replyTo = msg.message.reply_to;
             const event: InstagramDMMessage = {
               type: 'instagram_dm',
               messageId: msg.message.mid,
@@ -143,6 +152,8 @@ export class WebhookService {
               text: msg.message.text,
               attachmentUrl: msg.message.attachments?.[0]?.payload?.url,
               attachmentType: msg.message.attachments?.[0]?.type,
+              replyToMediaId: replyTo?.story?.id || replyTo?.post?.id,
+              replyToType: replyTo?.story ? 'story' : (replyTo?.post ? 'post' : undefined),
             };
             events.push(event);
           }
@@ -157,6 +168,7 @@ export class WebhookService {
               type: 'instagram_comment',
               commentId: val.id,
               mediaId: val.media?.id || '',
+              mediaProductType: val.media?.media_product_type || undefined,
               senderId: val.from?.id || '',
               senderUsername: val.from?.username || '',
               text: val.text || '',

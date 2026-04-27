@@ -42,6 +42,7 @@ export interface Mensagem {
   tipo_midia: string;
   midia_url: string;
   transcricao?: string;
+  instagram_media_id?: string | null;
   criado_em: string;
 }
 
@@ -65,10 +66,23 @@ export interface ScoringResult {
   detalhes: string[];
 }
 
+export interface InstagramPostInfo {
+  id: string;
+  ig_media_id: string;
+  tipo: string;
+  caption?: string | null;
+  permalink?: string | null;
+  media_product_type?: string | null;
+  media_url?: string | null;
+  thumbnail_url?: string | null;
+}
+
 export function useMensageria() {
   const [conversas, setConversas] = useState<Conversa[]>([]);
   const [mensagens, setMensagens] = useState<Mensagem[]>([]);
   const [dadosExtraidos, setDadosExtraidos] = useState<DadosExtraidos | null>(null);
+  const [instagramPost, setInstagramPost] = useState<InstagramPostInfo | null>(null);
+  const [instagramPosts, setInstagramPosts] = useState<Record<string, InstagramPostInfo>>({});
   const [enviando, setEnviando] = useState(false);
   const [conversaAtual, setConversaAtual] = useState<Conversa | null>(null);
   const [filtroCanal, setFiltroCanal] = useState<Canal>('todos');
@@ -108,6 +122,8 @@ export function useMensageria() {
       lastMsgCountRef.current = msgs.length;
       lastMsgIdRef.current = msgs.length > 0 ? msgs[msgs.length - 1].id : '';
       setDadosExtraidos(data.dadosExtraidos);
+      setInstagramPost(data.instagramPost || null);
+      setInstagramPosts(data.instagramPosts || {});
       setScoring(null); // Reset scoring ao trocar conversa
       // Zerar contador de nao lidas localmente
       setConversas(prev => prev.map(c => c.id === id ? { ...c, nao_lidas: 0 } : c));
@@ -311,6 +327,8 @@ export function useMensageria() {
             setMensagens(newMsgs);
           }
           if (data.dadosExtraidos) setDadosExtraidos(data.dadosExtraidos);
+          if (data.instagramPost) setInstagramPost(data.instagramPost);
+          if (data.instagramPosts) setInstagramPosts(data.instagramPosts);
         }).catch(() => {});
       }
     }, 5000);
@@ -333,6 +351,21 @@ export function useMensageria() {
     }
   };
 
+  const excluirTodasConversas = async () => {
+    try {
+      const { data } = await api.delete('/mensageria/conversas');
+      setConversaAtual(null);
+      setMensagens([]);
+      setConversas([]);
+      lastConversasHashRef.current = '';
+      await carregarConversas();
+      return data;
+    } catch (e) {
+      console.error('Erro ao apagar todas as conversas:', e);
+      throw e;
+    }
+  };
+
   const limparMensagens = async (id: string) => {
     try {
       await api.delete(`/mensageria/conversas/${id}/mensagens`);
@@ -349,6 +382,8 @@ export function useMensageria() {
     conversas,
     mensagens,
     dadosExtraidos,
+    instagramPost,
+    instagramPosts,
     enviando,
     conversaAtual,
     filtroCanal,
@@ -366,6 +401,7 @@ export function useMensageria() {
     toggleModoAuto,
     solicitarScoring,
     excluirConversa,
+    excluirTodasConversas,
     limparMensagens,
   };
 }

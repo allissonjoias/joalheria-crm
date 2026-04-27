@@ -258,14 +258,14 @@ export default function SdrSimulador() {
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pontuacao</p>
           <div className="flex items-end gap-2 mb-2">
             <span className={`text-4xl font-bold ${scoreColor}`}>{leadScore}</span>
-            <span className="text-gray-400 text-sm mb-1">/150</span>
+            <span className="text-gray-400 text-sm mb-1">/100</span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all duration-500 ${
                 leadScore >= 100 ? 'bg-green-500' : leadScore >= 50 ? 'bg-yellow-400' : 'bg-red-400'
               }`}
-              style={{ width: `${Math.min(100, (leadScore / 150) * 100)}%` }}
+              style={{ width: `${Math.min(100, (leadScore / 100) * 100)}%` }}
             />
           </div>
           <p className={`text-xs mt-2 font-medium ${scoreColor}`}>

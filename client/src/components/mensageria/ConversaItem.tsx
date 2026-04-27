@@ -45,20 +45,43 @@ export function ConversaItem({ conversa, selecionada, onClick }: ConversaItemPro
     ? msgPreview.substring(0, 55) + (msgPreview.length > 55 ? '...' : '')
     : 'Nenhuma mensagem';
 
-  // Banco salva em localtime (Fortaleza). Extrair HH:MM direto sem conversão de timezone.
-  const hora = (() => {
+  // Formatar data: Hoje = HH:MM, Ontem = "Ontem", depois = dd/mm/aaaa
+  const dataFormatada = (() => {
     if (!conversa.ultima_msg_em) return '';
-    const match = conversa.ultima_msg_em.match(/(\d{2}):(\d{2})/);
-    return match ? `${match[1]}:${match[2]}` : '';
+    // Extrair data e hora do timestamp do banco (localtime Fortaleza)
+    const matchFull = conversa.ultima_msg_em.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+    if (!matchFull) {
+      const matchHora = conversa.ultima_msg_em.match(/(\d{2}):(\d{2})/);
+      return matchHora ? `${matchHora[1]}:${matchHora[2]}` : '';
+    }
+    const [, ano, mes, dia, hh, mm] = matchFull;
+    const dataMsg = new Date(Number(ano), Number(mes) - 1, Number(dia));
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const ontem = new Date(hoje);
+    ontem.setDate(ontem.getDate() - 1);
+
+    if (dataMsg.getTime() >= hoje.getTime()) {
+      return `${hh}:${mm}`;
+    } else if (dataMsg.getTime() >= ontem.getTime()) {
+      return 'Ontem';
+    } else if (dataMsg.getFullYear() === hoje.getFullYear()) {
+      return `${dia}/${mes}`;
+    } else {
+      return `${dia}/${mes}/${ano.slice(2)}`;
+    }
   })();
 
   const bantScore = conversa.bant_score || 0;
   const bantCor = bantScore >= 3 ? 'bg-green-500' : bantScore >= 2 ? 'bg-yellow-500' : bantScore >= 1 ? 'bg-gray-400' : '';
 
   const [imgErro, setImgErro] = useState(false);
-  // Considerar foto valida apenas se for URL local (/uploads) ou URL que nao seja do WhatsApp expirado
   const fotoUrl = conversa.foto_perfil || '';
-  const fotoValida = fotoUrl && !imgErro && (fotoUrl.startsWith('/uploads') || fotoUrl.startsWith('http'));
+  // Aceitar: URLs locais (/uploads), URLs https que NAO sejam do WhatsApp (expiram rapido)
+  const fotoValida = fotoUrl && !imgErro && (
+    fotoUrl.startsWith('/uploads') ||
+    (fotoUrl.startsWith('http') && !fotoUrl.includes('pps.whatsapp.net'))
+  );
 
   const avatarColor = getAvatarColor(nome);
   const initials = getInitials(nome);
@@ -96,7 +119,7 @@ export function ConversaItem({ conversa, selecionada, onClick }: ConversaItemPro
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between">
           <p className="text-base font-normal truncate text-alisson-600">{nome}</p>
-          <span className="text-xs text-wa-time flex-shrink-0 ml-2">{hora}</span>
+          <span className="text-xs text-wa-time flex-shrink-0 ml-2">{dataFormatada}</span>
         </div>
         <div className="flex items-center justify-between mt-0.5">
           <p className="text-sm text-wa-time truncate flex-1">{preview}</p>

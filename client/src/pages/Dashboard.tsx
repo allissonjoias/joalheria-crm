@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DollarSign, Users, ShoppingBag, TrendingUp, Bell, Kanban } from 'lucide-react';
+import { DollarSign, Users, ShoppingBag, TrendingUp, Bell, Kanban, Crown, Repeat, Trophy } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Card } from '../components/ui/Card';
 import { Tooltip } from '../components/ui/Tooltip';
@@ -36,6 +36,9 @@ export default function Dashboard() {
   const [vendasPeriodo, setVendasPeriodo] = useState<any[]>([]);
   const [vendasCategoria, setVendasCategoria] = useState<any[]>([]);
   const [topProdutos, setTopProdutos] = useState<any[]>([]);
+  const [rankingClientes, setRankingClientes] = useState<any[]>([]);
+  const [indicadores, setIndicadores] = useState<any>(null);
+  const [ordemRanking, setOrdemRanking] = useState('valor_total');
 
   useEffect(() => {
     api.get('/dashboard/resumo').then(({ data }) => setResumo(data)).catch(() => {
@@ -44,7 +47,13 @@ export default function Dashboard() {
     api.get('/dashboard/vendas-periodo?dias=30').then(({ data }) => setVendasPeriodo(data)).catch(() => {});
     api.get('/dashboard/vendas-categoria').then(({ data }) => setVendasCategoria(data)).catch(() => {});
     api.get('/dashboard/top-produtos').then(({ data }) => setTopProdutos(data)).catch(() => {});
+    api.get('/dashboard/indicadores-clientes').then(({ data }) => setIndicadores(data)).catch(() => {});
+    api.get('/dashboard/ranking-clientes?ordem=valor_total&limite=10').then(({ data }) => setRankingClientes(data)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.get(`/dashboard/ranking-clientes?ordem=${ordemRanking}&limite=10`).then(({ data }) => setRankingClientes(data)).catch(() => {});
+  }, [ordemRanking]);
 
   if (!resumo) {
     return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-alisson-600" /></div>;
@@ -173,6 +182,116 @@ export default function Dashboard() {
           </Card>
         </Tooltip>
       </div>
+
+      {/* Indicadores de Clientes */}
+      {indicadores && (
+        <>
+          <h2 className="text-lg md:text-xl font-bold text-alisson-600 mt-6 md:mt-8 mb-3 md:mb-4 flex items-center gap-2">
+            <Crown size={20} />
+            Indicadores de Clientes
+          </h2>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-4 md:mb-6">
+            <Card className="p-3 md:p-5">
+              <p className="text-xs md:text-sm text-gray-500">Clientes Compradores</p>
+              <p className="text-lg md:text-2xl font-bold text-alisson-600">{indicadores.clientes_compradores}</p>
+            </Card>
+            <Card className="p-3 md:p-5">
+              <p className="text-xs md:text-sm text-gray-500">Ticket Medio</p>
+              <p className="text-lg md:text-2xl font-bold text-alisson-600">{formatarMoeda(indicadores.ticket_medio_geral)}</p>
+            </Card>
+            <Card className="p-3 md:p-5">
+              <p className="text-xs md:text-sm text-gray-500 flex items-center gap-1"><Repeat size={14} /> Recorrentes</p>
+              <p className="text-lg md:text-2xl font-bold text-alisson-600">{indicadores.clientes_recorrentes}</p>
+              <p className="text-[10px] md:text-xs text-gray-400">{indicadores.taxa_recorrencia}% de recorrencia</p>
+            </Card>
+            <Card className="p-3 md:p-5">
+              <p className="text-xs md:text-sm text-gray-500">Total Vendas</p>
+              <p className="text-lg md:text-2xl font-bold text-alisson-600">{formatarMoeda(indicadores.valor_total)}</p>
+              <p className="text-[10px] md:text-xs text-gray-400">{indicadores.total_vendas} vendas</p>
+            </Card>
+          </div>
+
+          {/* Faixas de Valor */}
+          {indicadores.faixas_valor?.length > 0 && (
+            <Card className="p-3 md:p-5 mb-4 md:mb-6">
+              <h3 className="text-base md:text-lg font-semibold text-alisson-600 mb-3">Clientes por Faixa de Valor</h3>
+              <ResponsiveContainer width="100%" height={200} className="md:!h-[280px]">
+                <BarChart data={indicadores.faixas_valor} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis dataKey="faixa" type="category" tick={{ fontSize: 10 }} width={120} />
+                  <RechartsTooltip
+                    formatter={(v: number, name: string) => [name === 'clientes' ? `${v} clientes` : formatarMoeda(v), name === 'clientes' ? 'Clientes' : 'Valor Total']}
+                  />
+                  <Bar dataKey="clientes" fill="#184036" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </Card>
+          )}
+        </>
+      )}
+
+      {/* Ranking de Clientes */}
+      <Card className="p-3 md:p-5 mb-4 md:mb-6">
+        <div className="flex items-center justify-between mb-3 md:mb-4">
+          <h3 className="text-base md:text-lg font-semibold text-alisson-600 flex items-center gap-2">
+            <Trophy size={18} className="text-alisson-600" />
+            Ranking de Clientes
+          </h3>
+          <select
+            value={ordemRanking}
+            onChange={(e) => setOrdemRanking(e.target.value)}
+            className="text-xs md:text-sm border border-gray-200 rounded-lg px-2 py-1 text-gray-700 focus:outline-none focus:ring-2 focus:ring-alisson-500"
+          >
+            <option value="valor_total">Maior Valor</option>
+            <option value="quantidade">Mais Compras</option>
+            <option value="ticket_medio">Maior Ticket</option>
+            <option value="recente">Mais Recente</option>
+          </select>
+        </div>
+        {rankingClientes.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs md:text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="pb-2 pr-2">#</th>
+                  <th className="pb-2 pr-2">Cliente</th>
+                  <th className="pb-2 pr-2 text-right">Compras</th>
+                  <th className="pb-2 pr-2 text-right">Valor Total</th>
+                  <th className="pb-2 text-right hidden md:table-cell">Ticket Medio</th>
+                  <th className="pb-2 text-right hidden md:table-cell">Ultima Compra</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankingClientes.map((c: any, i: number) => (
+                  <tr key={c.id} className="border-b border-gray-50 hover:bg-gray-50">
+                    <td className="py-2 pr-2">
+                      {i < 3 ? (
+                        <span className={`inline-flex items-center justify-center w-5 h-5 md:w-6 md:h-6 rounded-full text-white text-[10px] md:text-xs font-bold ${i === 0 ? 'bg-yellow-500' : i === 1 ? 'bg-gray-400' : 'bg-amber-700'}`}>
+                          {i + 1}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">{i + 1}</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2">
+                      <div className="font-medium text-alisson-600 truncate max-w-[120px] md:max-w-[200px]">{c.nome}</div>
+                      <div className="text-[10px] text-gray-400 truncate">{c.telefone || c.email || c.cidade || ''}</div>
+                    </td>
+                    <td className="py-2 pr-2 text-right font-medium">{c.total_compras}</td>
+                    <td className="py-2 pr-2 text-right font-medium text-alisson-600">{formatarMoeda(c.valor_total)}</td>
+                    <td className="py-2 text-right hidden md:table-cell">{formatarMoeda(c.ticket_medio)}</td>
+                    <td className="py-2 text-right hidden md:table-cell text-gray-500">{c.ultima_compra ? c.ultima_compra.slice(0, 10) : '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">Nenhuma venda registrada</p>
+        )}
+      </Card>
     </div>
   );
 }

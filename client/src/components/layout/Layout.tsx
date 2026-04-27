@@ -2,26 +2,15 @@ import { Outlet, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, Inbox, Users, Package,
-  Kanban, DollarSign, Bell, Settings, Smartphone,
-  Bot, Zap, Workflow, LogOut, User, Menu, X,
+  Inbox, Kanban, Settings,
+  LogOut, User, Menu, X,
   ChevronRight,
 } from 'lucide-react';
 import { Tooltip } from '../ui/Tooltip';
-import api from '../../services/api';
 
 const navPrincipal = [
   { to: '/mensagens', icon: Inbox, label: 'Mensagens' },
-  { to: '/', icon: LayoutDashboard, label: 'Painel' },
   { to: '/pipeline', icon: Kanban, label: 'Funil de Vendas' },
-  { to: '/clientes', icon: Users, label: 'Clientes' },
-  { to: '/produtos', icon: Package, label: 'Produtos' },
-  { to: '/vendas', icon: DollarSign, label: 'Vendas' },
-  { to: '/lembretes', icon: Bell, label: 'Lembretes' },
-  { to: '/agentes-ia', icon: Bot, label: 'Agentes IA' },
-  { to: '/whatsapp', icon: Smartphone, label: 'WhatsApp' },
-  { to: '/automacoes', icon: Workflow, label: 'Automacoes' },
-  { to: '/simulador', icon: Zap, label: 'Simulador' },
 ];
 
 // Label da pagina atual para o header mobile
@@ -34,17 +23,8 @@ function getPageLabel(pathname: string): string {
 
 export function Layout() {
   const { usuario, carregando, logout } = useAuth();
-  const [lembretes, setLembretes] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const location = useLocation();
-
-  const fullBleed = location.pathname === '/mensagens' || location.pathname === '/pipeline';
-
-  useEffect(() => {
-    api.get('/lembretes/pendentes')
-      .then(({ data }) => setLembretes(data.total))
-      .catch(() => {});
-  }, []);
 
   // Fechar drawer ao navegar
   useEffect(() => {
@@ -67,106 +47,55 @@ export function Layout() {
   }
 
   const pageLabel = getPageLabel(location.pathname);
+  const isConfig = location.pathname === '/configuracoes';
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-[#d1d7db]">
-      {/* Faixa verde no topo - escondida no mobile */}
-      <div className="hidden md:block fixed top-0 left-0 right-0 h-[127px] bg-alisson-600 z-0" />
-
-      {/* Container principal */}
-      <div
-        className="relative z-10 flex overflow-hidden
-          h-screen w-screen
-          md:mx-auto md:shadow-2xl"
-      >
-        {/* Desktop: estilo com margens */}
-        <style>{`
-          @media (min-width: 768px) {
-            .layout-container {
-              margin-top: 19px !important;
-              height: calc(100vh - 38px) !important;
-              max-width: calc(100% - 38px) !important;
-              margin-left: auto !important;
-              margin-right: auto !important;
-            }
-          }
-        `}</style>
-        <div
-          className="layout-container relative z-10 flex overflow-hidden w-full h-full md:shadow-2xl"
-        >
-          {/* Barra de icones lateral - DESKTOP ONLY */}
+    <div className="h-screen w-screen overflow-hidden bg-[#111b21]">
+      <div className="flex h-full w-full overflow-hidden">
+          {/* Barra lateral - estilo WhatsApp */}
           <nav className="hidden md:flex w-[68px] bg-[#1a2e28] flex-col items-center flex-shrink-0">
-            {/* Avatar do usuario */}
-            <div className="w-full flex justify-center py-4 bg-alisson-600 border-b border-alisson-500">
-              <Tooltip texto={`${usuario.nome} (${usuario.papel})`} posicao="right">
-                <div className="w-10 h-10 bg-alisson-400 rounded-full flex items-center justify-center cursor-default">
-                  <User size={18} className="text-white" />
-                </div>
-              </Tooltip>
-            </div>
-
-            {/* Itens de navegacao */}
-            <div className="flex-1 flex flex-col items-center w-full py-2 overflow-y-auto scrollbar-thin">
+            {/* Icones de navegacao */}
+            <div className="flex-1 flex flex-col items-center w-full pt-3">
               {navPrincipal.map((item) => (
                 <Tooltip key={item.to} texto={item.label} posicao="right">
                   <NavLink
                     to={item.to}
-                    end={item.to === '/'}
                     className={({ isActive }) =>
-                      `relative w-full flex justify-center py-3 transition-colors ${
+                      `relative w-full flex justify-center py-3.5 transition-colors ${
                         isActive
-                          ? 'text-white bg-white/10'
-                          : 'text-[#8696a0] hover:text-white hover:bg-white/5'
+                          ? 'text-white'
+                          : 'text-[#8696a0] hover:text-white'
                       }`
                     }
                   >
-                    {({ isActive }) => (
-                      <>
-                        {isActive && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-creme-300 rounded-r-full" />
-                        )}
-                        <item.icon size={22} />
-                        {item.to === '/lembretes' && lembretes > 0 && (
-                          <span className="absolute top-1.5 right-2.5 bg-[#25d366] text-white text-[9px] font-bold min-w-[16px] h-4 rounded-full flex items-center justify-center px-0.5">
-                            {lembretes > 9 ? '9+' : lembretes}
-                          </span>
-                        )}
-                      </>
-                    )}
+                    <item.icon size={24} />
                   </NavLink>
                 </Tooltip>
               ))}
             </div>
 
-            {/* Rodape: config + sair */}
-            <div className="flex flex-col items-center w-full border-t border-white/10">
+            {/* Rodape */}
+            <div className="flex flex-col items-center w-full pb-3">
               <Tooltip texto="Configuracoes" posicao="right">
                 <NavLink
                   to="/configuracoes"
                   className={({ isActive }) =>
-                    `relative w-full flex justify-center py-3 transition-colors ${
-                      isActive
-                        ? 'text-white bg-white/10'
-                        : 'text-[#8696a0] hover:text-white hover:bg-white/5'
+                    `w-full flex justify-center py-3.5 transition-colors ${
+                      isActive ? 'text-white' : 'text-[#8696a0] hover:text-white'
                     }`
                   }
                 >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-6 bg-creme-300 rounded-r-full" />
-                      )}
-                      <Settings size={22} />
-                    </>
-                  )}
+                  <Settings size={24} />
                 </NavLink>
               </Tooltip>
-              <Tooltip texto="Sair" posicao="right">
+              <Tooltip texto={usuario.nome} posicao="right">
                 <button
                   onClick={logout}
-                  className="w-full flex justify-center py-3 text-[#8696a0] hover:text-red-400 hover:bg-white/5 transition-colors"
+                  className="w-full flex justify-center py-3.5"
                 >
-                  <LogOut size={22} />
+                  <div className="w-8 h-8 bg-alisson-400 rounded-full flex items-center justify-center">
+                    <User size={16} className="text-white" />
+                  </div>
                 </button>
               </Tooltip>
             </div>
@@ -174,8 +103,8 @@ export function Layout() {
 
           {/* Area de conteudo */}
           <main className="flex-1 min-w-0 flex flex-col overflow-hidden bg-[#f0f2f5]">
-            {/* Header mobile - estilo WhatsApp */}
-            {!fullBleed && (
+            {/* Header mobile para config */}
+            {isConfig && (
               <div className="md:hidden bg-alisson-600 px-4 py-3 flex items-center gap-3 flex-shrink-0">
                 <button
                   onClick={() => setDrawerOpen(true)}
@@ -189,7 +118,7 @@ export function Layout() {
             )}
 
             {/* Header mobile para fullBleed (mensagens/pipeline) - so o hamburger */}
-            {fullBleed && (
+            {!isConfig && (
               <div className="md:hidden absolute top-3 left-3 z-30">
                 <button
                   onClick={() => setDrawerOpen(true)}
@@ -200,17 +129,16 @@ export function Layout() {
               </div>
             )}
 
-            {fullBleed ? (
-              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+            {isConfig ? (
+              <div className="flex-1 overflow-y-auto p-4 md:p-6">
                 <Outlet />
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-4 md:p-6">
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
                 <Outlet />
               </div>
             )}
           </main>
-        </div>
       </div>
 
       {/* ===== MOBILE DRAWER (estilo WhatsApp) ===== */}
@@ -246,7 +174,6 @@ export function Layout() {
                 <NavLink
                   key={item.to}
                   to={item.to}
-                  end={item.to === '/'}
                   className={({ isActive }) =>
                     `flex items-center gap-4 px-5 py-3.5 transition-colors ${
                       isActive
@@ -259,11 +186,6 @@ export function Layout() {
                     <>
                       <item.icon size={20} className={isActive ? 'text-alisson-600' : 'text-gray-400'} />
                       <span className="text-sm flex-1">{item.label}</span>
-                      {item.to === '/lembretes' && lembretes > 0 && (
-                        <span className="bg-[#25d366] text-white text-[10px] font-bold min-w-[20px] h-5 rounded-full flex items-center justify-center px-1.5">
-                          {lembretes > 9 ? '9+' : lembretes}
-                        </span>
-                      )}
                       {isActive && <ChevronRight size={16} className="text-alisson-400" />}
                     </>
                   )}
@@ -301,13 +223,6 @@ export function Layout() {
           </div>
         </div>
       )}
-
-      {/* Safe area bottom padding for iOS */}
-      <style>{`
-        .safe-area-bottom {
-          padding-bottom: env(safe-area-inset-bottom, 0px);
-        }
-      `}</style>
     </div>
   );
 }

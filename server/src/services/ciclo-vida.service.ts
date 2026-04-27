@@ -218,21 +218,21 @@ export class CicloVidaService {
 
     switch (ag.tipo) {
       case 'nutricao_30d':
-        novoEstagio = 'Nutricao 30d';
+        novoEstagio = 'Recompra';
         cicloNum = 1;
         tituloTarefa = `Nutricao 30 dias - ${nomeCliente}`;
         descricaoTarefa = `Faz 30 dias que ${nomeCliente} recebeu o pedido. Enviar mensagem perguntando como esta a peca, se precisa de ajuste, e apresentar novidades.`;
         break;
 
       case 'nutricao_60d':
-        novoEstagio = 'Nutricao 60d';
+        novoEstagio = 'Recompra';
         cicloNum = 2;
         tituloTarefa = `Nutricao 60 dias - ${nomeCliente}`;
         descricaoTarefa = `Faz 60 dias da compra de ${nomeCliente}. Enviar conteudo exclusivo, lancamentos ou promocao personalizada.`;
         break;
 
       case 'nutricao_90d':
-        novoEstagio = 'Nutricao 90d';
+        novoEstagio = 'Recompra';
         cicloNum = 3;
         tituloTarefa = `Nutricao 90 dias - ${nomeCliente}`;
         descricaoTarefa = `Faz 90 dias da compra de ${nomeCliente}. Momento ideal para sondar recompra. Verificar interesse em novas pecas, presentear alguem, datas comemorativas proximas.`;
@@ -497,6 +497,191 @@ export class CicloVidaService {
       case 'Entregue':
         this.onEntregue(odvId, usuarioId);
         break;
+    }
+
+    // Executar automacoes configuradas para esta transicao de estagio
+    this.executarAutomacoesEtapa(odvId, estagioAnterior, estagioNovo);
+  }
+
+  /**
+   * Executa automacoes configuradas para transicao de estagio
+   */
+  public executarAutomacoesEtapa(odvId: string, estagioAnterior: string, estagioNovo: string) {
+    const db = getDb();
+    try {
+      // Buscar automacoes ativas para este estagio destino
+      const automacoes = db.prepare(
+        `SELECT * FROM automacao_etapas
+         WHERE estagio_destino = ? AND ativo = 1
+         AND (estagio_origem IS NULL OR estagio_origem = ?)
+         ORDER BY ordem`
+      ).all(estagioNovo, estagioAnterior) as any[];
+
+      if (!automacoes.length) return;
+
+      const odv = db.prepare(
+        'SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone FROM pipeline p LEFT JOIN clientes c ON p.cliente_id = c.id WHERE p.id = ?'
+      ).get(odvId) as any;
+      if (!odv) return;
+
+      for (const auto of automacoes) {
+        try {
+          const config = JSON.parse(auto.config || '{}');
+          this.executarAcao(auto, config, odv);
+
+          // Log de sucesso
+          db.prepare(
+            `INSERT INTO automacao_etapas_log (automacao_id, pipeline_id, cliente_id, status, resultado)
+             VALUES (?, ?, ?, 'executado', ?)`
+          ).run(auto.id, odvId, odv.cliente_id, `${auto.tipo_acao}: ${auto.descricao || estagioNovo}`);
+        } catch (e: any) {
+          console.error(`[AUTOMACAO-ETAPA] Erro ao executar #${auto.id}:`, e.message);
+          db.prepare(
+            `INSERT INTO automacao_etapas_log (automacao_id, pipeline_id, cliente_id, status, resultado)
+             VALUES (?, ?, ?, 'erro', ?)`
+          ).run(auto.id, odvId, odv.cliente_id, e.message);
+        }
+      }
+      saveDb();
+    } catch (e: any) {
+      console.error('[AUTOMACAO-ETAPA] Erro geral:', e.message);
+    }
+  }
+
+  /**
+   * Executa uma acao individual de automacao
+   */
+  private executarAcao(automacao: any, config: any, odv: any) {
+    const db = getDb();
+
+    switch (automacao.tipo_acao) {
+      case 'enviar_whatsapp': {
+        if (!odv.cliente_telefone || !config.mensagem) break;
+        // Substituir variaveis na mensagem
+        let msg = config.mensagem
+          .replace(/\{nome\}/g, odv.cliente_nome || 'Cliente')
+          .replace(/\{titulo\}/g, odv.titulo || '')
+          .replace(/\{valor\}/g, odv.valor ? `R$ ${Number(odv.valor).toFixed(2).replace('.', ',')}` : '')
+          .replace(/\{estagio\}/g, automacao.estagio_destino)
+          .replace(/\{rastreio\}/g, odv.codigo_rastreio || '')
+          .replace(/\{endereco\}/g, odv.endereco_entrega || '');
+        // Agendar envio via fila (async, nao bloqueia)
+        try {
+          const { whatsappQueueService } = require('./whatsapp-queue.service');
+          whatsappQueueService.enviarMensagemDireta(odv.cliente_id, odv.cliente_telefone, msg);
+        } catch (e: any) {
+          console.error('[AUTOMACAO] Erro WhatsApp:', e.message);
+        }
+        console.log(`[AUTOMACAO-ETAPA] WhatsApp enviado para ${odv.cliente_nome}: ${msg.substring(0, 50)}...`);
+        break;
+      }
+
+      case 'criar_tarefa': {
+        const titulo = (config.titulo || `Tarefa automatica - ${automacao.estagio_destino}`)
+          .replace(/\{nome\}/g, odv.cliente_nome || 'Cliente');
+        const descricao = (config.descricao || '')
+          .replace(/\{nome\}/g, odv.cliente_nome || 'Cliente');
+        const dias = config.dias_vencimento || 1;
+        db.prepare(
+          `INSERT INTO tarefas (pipeline_id, cliente_id, vendedor_id, titulo, descricao, tipo, prioridade, data_vencimento)
+           VALUES (?, ?, ?, ?, ?, 'geral', ?, datetime('now', 'localtime', '+${dias} days'))`
+        ).run(odv.id, odv.cliente_id, odv.vendedor_id, titulo, descricao, config.prioridade || 'media');
+        console.log(`[AUTOMACAO-ETAPA] Tarefa criada: ${titulo}`);
+        break;
+      }
+
+      case 'mover_estagio': {
+        if (!config.estagio_alvo) break;
+        db.prepare(
+          "UPDATE pipeline SET estagio = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?"
+        ).run(config.estagio_alvo, odv.id);
+        db.prepare(
+          `INSERT INTO pipeline_historico (pipeline_id, estagio_anterior, estagio_novo, automatico, motivo)
+           VALUES (?, ?, ?, 1, ?)`
+        ).run(odv.id, automacao.estagio_destino, config.estagio_alvo, `Automacao: ${automacao.descricao || 'mover automatico'}`);
+        console.log(`[AUTOMACAO-ETAPA] ODV movida para ${config.estagio_alvo}`);
+        break;
+      }
+
+      case 'notificar_equipe': {
+        const msg = (config.mensagem || `ODV ${odv.titulo} chegou em ${automacao.estagio_destino}`)
+          .replace(/\{nome\}/g, odv.cliente_nome || 'Cliente')
+          .replace(/\{titulo\}/g, odv.titulo || '')
+          .replace(/\{estagio\}/g, automacao.estagio_destino);
+        console.log(`[AUTOMACAO-ETAPA] Notificacao equipe: ${msg}`);
+        break;
+      }
+
+      case 'atualizar_campo': {
+        if (!config.campo || config.valor === undefined) break;
+        const camposPermitidos = ['forma_envio', 'tipo_pedido', 'forma_atendimento', 'observacao_pedido', 'classificacao'];
+        if (camposPermitidos.includes(config.campo)) {
+          db.prepare(
+            `UPDATE pipeline SET ${config.campo} = ?, atualizado_em = datetime('now', 'localtime') WHERE id = ?`
+          ).run(config.valor, odv.id);
+          console.log(`[AUTOMACAO-ETAPA] Campo ${config.campo} atualizado para ${config.valor}`);
+        }
+        break;
+      }
+    }
+  }
+
+  /**
+   * Executa automações baseadas em gatilho (ao_cliente_responder, por_lead_score, etc.)
+   * Chamado de outros serviços quando eventos ocorrem
+   */
+  public executarAutomacoesGatilho(gatilho: string, clienteId: string, dados?: { score?: number; conversaId?: string }) {
+    const db = getDb();
+    try {
+      // Buscar ODVs ativas do cliente no funil 10
+      const odvs = db.prepare(
+        "SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone FROM pipeline p LEFT JOIN clientes c ON p.cliente_id = c.id WHERE p.cliente_id = ? AND p.funil_id = 10"
+      ).all(clienteId) as any[];
+
+      if (!odvs.length) return;
+
+      for (const odv of odvs) {
+        // Buscar automacoes com este gatilho onde o ODV esta no estagio_origem
+        const automacoes = db.prepare(
+          `SELECT * FROM automacao_etapas
+           WHERE gatilho = ? AND estagio_origem = ? AND ativo = 1 AND funil_id = 10
+           ORDER BY ordem`
+        ).all(gatilho, odv.estagio) as any[];
+
+        for (const auto of automacoes) {
+          try {
+            const config = JSON.parse(auto.config || '{}');
+
+            // Verificar condicoes especificas do gatilho
+            if (gatilho === 'por_lead_score') {
+              const scoreMinimo = config.score_minimo || 0;
+              const scoreMaximo = config.score_maximo || 999;
+              const scoreAtual = dados?.score || 0;
+              if (scoreAtual < scoreMinimo || scoreAtual > scoreMaximo) continue;
+            }
+
+            // Executar a acao
+            this.executarAcao(auto, config, odv);
+
+            // Log de sucesso
+            db.prepare(
+              `INSERT INTO automacao_etapas_log (automacao_id, pipeline_id, cliente_id, status, resultado)
+               VALUES (?, ?, ?, 'executado', ?)`
+            ).run(auto.id, odv.id, odv.cliente_id, `Gatilho ${gatilho}: ${auto.descricao || auto.tipo_acao}`);
+
+            console.log(`[AUTOMACAO-GATILHO] ${gatilho} → ${auto.tipo_acao} para ODV ${odv.id} (${odv.estagio})`);
+          } catch (e: any) {
+            console.error(`[AUTOMACAO-GATILHO] Erro #${auto.id}:`, e.message);
+            db.prepare(
+              `INSERT INTO automacao_etapas_log (automacao_id, pipeline_id, cliente_id, status, resultado)
+               VALUES (?, ?, ?, 'erro', ?)`
+            ).run(auto.id, odv.id, odv.cliente_id, e.message);
+          }
+        }
+      }
+      saveDb();
+    } catch (e: any) {
+      console.error('[AUTOMACAO-GATILHO] Erro geral:', e.message);
     }
   }
 

@@ -312,6 +312,8 @@ export default function Mensageria() {
     conversas,
     mensagens,
     dadosExtraidos,
+    instagramPost,
+    instagramPosts,
     enviando,
     conversaAtual,
     filtroCanal,
@@ -325,6 +327,7 @@ export default function Mensageria() {
     toggleModoAuto,
     solicitarScoring,
     excluirConversa,
+    excluirTodasConversas,
     limparMensagens,
   } = useMensageria();
 
@@ -347,6 +350,7 @@ export default function Mensageria() {
             filtroCanal={filtroCanal}
             onSelecionar={selecionarConversa}
             onFiltrar={setFiltroCanal}
+            onApagarTodas={excluirTodasConversas}
           />
         </div>
 
@@ -356,6 +360,8 @@ export default function Mensageria() {
             conversa={conversaAtual}
             mensagens={mensagens}
             enviando={enviando}
+            instagramPost={instagramPost}
+            instagramPosts={instagramPosts}
             onEnviar={enviarMensagem}
             onEnviarComDara={enviarComDara}
             onEnviarMidia={enviarMidia}

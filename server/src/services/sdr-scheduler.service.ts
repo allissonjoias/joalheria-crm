@@ -118,7 +118,32 @@ export class SdrSchedulerService {
 
     this.jobs.push({ nome: 'brechas', task: brechasJob });
 
-    // Job 7: Automacao - processar waits pendentes (a cada 1 minuto)
+    // Job 7: Reconciliacao Mercado Pago (a cada 30 minutos)
+    const reconciliacaoJob = cron.schedule('*/30 * * * *', async () => {
+      try {
+        const reconciliados = await brechasService.reconciliarPagamentosMP();
+        if (reconciliados > 0) {
+          console.log(`[RECONCILIACAO] ${reconciliados} pagamentos reconciliados`);
+        }
+      } catch (e) {
+        console.error('[RECONCILIACAO] Erro:', e);
+      }
+    }, { timezone: fusoAtual() });
+
+    this.jobs.push({ nome: 'reconciliacao_mp', task: reconciliacaoJob });
+
+    // Job 8: Follow-ups automaticos WhatsApp (a cada 5 minutos)
+    const followupsAutoJob = cron.schedule('*/5 * * * *', async () => {
+      try {
+        await brechasService.processarFollowupsAuto();
+      } catch (e) {
+        console.error('[FOLLOWUP-AUTO] Erro:', e);
+      }
+    }, { timezone: fusoAtual() });
+
+    this.jobs.push({ nome: 'followups_auto', task: followupsAutoJob });
+
+    // Job 9: Automacao - processar waits pendentes (a cada 1 minuto)
     const automacaoJob = cron.schedule('* * * * *', () => {
       try {
         automacaoEngine.processarWaitsPendentes();

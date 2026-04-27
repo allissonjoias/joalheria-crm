@@ -899,7 +899,7 @@ function QualificacaoLocal() {
                         </td>
                         <td className="py-2.5 px-2">
                           <span className={`font-bold ${scoreColor}`}>{lead.lead_score}</span>
-                          <span className="text-gray-400 text-xs">/150</span>
+                          <span className="text-gray-400 text-xs">/100</span>
                         </td>
                         <td className="py-2.5 px-2">
                           <span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cores.bg} ${cores.text}`}>

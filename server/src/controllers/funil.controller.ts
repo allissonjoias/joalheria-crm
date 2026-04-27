@@ -73,7 +73,7 @@ export class FunilController {
   atualizarEstagio(req: Request, res: Response) {
     const db = getDb();
     const { id } = req.params;
-    const { nome, cor, ordem, tipo } = req.body;
+    const { nome, cor, ordem, tipo, fase } = req.body;
 
     const campos: string[] = [];
     const valores: any[] = [];
@@ -82,6 +82,7 @@ export class FunilController {
     if (cor !== undefined) { campos.push('cor = ?'); valores.push(cor); }
     if (ordem !== undefined) { campos.push('ordem = ?'); valores.push(ordem); }
     if (tipo !== undefined) { campos.push('tipo = ?'); valores.push(tipo); }
+    if (fase !== undefined) { campos.push('fase = ?'); valores.push(fase); }
 
     if (campos.length === 0) return res.status(400).json({ erro: 'Nenhum campo para atualizar' });
 

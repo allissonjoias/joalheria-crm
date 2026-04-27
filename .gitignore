@@ -2,7 +2,12 @@ node_modules/
 dist/
 .env
 *.db
+*.db.*
 uploads/
 whatsapp-auth/
 *.tsbuildinfo
 test_token.txt
+.claude/
+*.log
+server/tmp_*.cjs
+server/tmp_*.js

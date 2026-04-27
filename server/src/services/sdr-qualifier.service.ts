@@ -48,6 +48,7 @@ export class SdrQualifierService {
           bant_authority = ?, bant_authority_score = ?,
           bant_need = ?, bant_need_score = ?,
           bant_timeline = ?, bant_timeline_score = ?,
+          bant_bonus_score = ?,
           ultima_interacao = datetime('now', 'localtime'),
           atualizado_em = datetime('now', 'localtime')
         WHERE id = ?`
@@ -58,6 +59,7 @@ export class SdrQualifierService {
         bant.authority || null, scores.authority_score,
         bant.need || null, scores.need_score,
         bant.timeline || null, scores.timeline_score,
+        scores.bonus_score,
         existente.id
       );
     } else {
@@ -66,15 +68,16 @@ export class SdrQualifierService {
           (telefone, cliente_id, lead_score, classificacao,
            bant_budget, bant_budget_score, bant_authority, bant_authority_score,
            bant_need, bant_need_score, bant_timeline, bant_timeline_score,
-           ultima_interacao)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))`
+           bant_bonus_score, ultima_interacao)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))`
       ).run(
         telefone, clienteId || null,
         total, classificacao,
         bant.budget || null, scores.budget_score,
         bant.authority || null, scores.authority_score,
         bant.need || null, scores.need_score,
-        bant.timeline || null, scores.timeline_score
+        bant.timeline || null, scores.timeline_score,
+        scores.bonus_score
       );
     }
 
@@ -102,14 +105,13 @@ export class SdrQualifierService {
     return { score: total, classificacao, movido };
   }
 
-  // Mapear classificacao BANT para estagio do funil local
+  // Mapear classificacao BANT para estagio do funil unificado
+  // Movimentacao principal (QUENTE→Qualificado) agora e feita pelo sistema de automacoes configuravel
+  // Aqui so movemos DESCARTE→Perdido (caso extremo)
   private classificacaoParaEstagio(classificacao: string): string | null {
     switch (classificacao) {
-      case 'QUENTE': return 'Interessado';
-      case 'MORNO': return 'Contatado';
-      case 'FRIO': return 'Lead';
       case 'DESCARTE': return 'Perdido';
-      default: return null;
+      default: return null; // Automacoes configuraveis cuidam dos outros casos
     }
   }
 

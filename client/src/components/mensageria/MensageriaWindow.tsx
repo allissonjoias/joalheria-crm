@@ -5,7 +5,7 @@ import { MensagemItem } from './MensagemItem';
 import { MensageriaInput } from './MensageriaInput';
 import { CanalBadge } from './CanalBadge';
 import { ModoAutoToggle } from './ModoAutoToggle';
-import type { Mensagem, Conversa } from '../../hooks/useMensageria';
+import type { Mensagem, Conversa, InstagramPostInfo } from '../../hooks/useMensageria';
 import api from '../../services/api';
 
 function BANTBadge({ conversa }: { conversa: Conversa }) {
@@ -62,6 +62,8 @@ interface MensageriaWindowProps {
   conversa: Conversa | null;
   mensagens: Mensagem[];
   enviando: boolean;
+  instagramPost?: InstagramPostInfo | null;
+  instagramPosts?: Record<string, InstagramPostInfo>;
   onEnviar: (mensagem: string) => void;
   onEnviarComDara: () => void;
   onEnviarMidia: (arquivo: File, caption?: string) => void;
@@ -219,15 +221,63 @@ function formatarDataSeparador(dataStr: string): string {
   return data.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+/**
+ * <img> que tenta uma lista de URLs em cascata (do maior pro menor),
+ * caindo pra próxima quando uma falha. Útil pra fotos de perfil do Instagram CDN
+ * que tem URL assinada por tamanho.
+ */
+function FotoCascata({ variantes, alt, className }: { variantes: string[]; alt: string; className?: string }) {
+  const [idx, setIdx] = useState(0);
+  // Reset quando mudar a lista (foto diferente)
+  useEffect(() => { setIdx(0); }, [variantes.join('|')]);
+
+  if (!variantes.length) return null;
+  const src = variantes[Math.min(idx, variantes.length - 1)];
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (idx < variantes.length - 1) setIdx(idx + 1);
+      }}
+    />
+  );
+}
+
 function chaveDia(dataStr: string): string {
   const data = new Date(dataStr);
   return `${data.getFullYear()}-${data.getMonth()}-${data.getDate()}`;
+}
+
+/**
+ * Gera variantes da URL do Instagram CDN com tamanhos progressivamente menores.
+ * O CDN assina a URL pra um tamanho específico — se o cliente trocar pra um maior
+ * que o CDN não tem, dá 403. Por isso tentamos do maior pro menor.
+ */
+function variantesFoto(url?: string | null): string[] {
+  if (!url) return [];
+  const tamanhos = [640, 320, 206];
+  const variantes: string[] = [];
+  for (const t of tamanhos) {
+    if (/stp=dst-jpg_s\d+x\d+_tt6/.test(url)) {
+      variantes.push(url.replace(/stp=dst-jpg_s\d+x\d+_tt6/g, `stp=dst-jpg_s${t}x${t}_tt6`));
+    } else if (/stp=dst-jpg_s\d+x\d+/.test(url)) {
+      variantes.push(url.replace(/stp=dst-jpg_s\d+x\d+/g, `stp=dst-jpg_s${t}x${t}`));
+    }
+  }
+  // Original como ultimo fallback
+  variantes.push(url);
+  // Remove duplicatas mantendo ordem
+  return Array.from(new Set(variantes));
 }
 
 export function MensageriaWindow({
   conversa,
   mensagens,
   enviando,
+  instagramPosts,
   onEnviar,
   onEnviarComDara,
   onEnviarMidia,
@@ -565,7 +615,13 @@ export function MensageriaWindow({
                     </span>
                   </div>
                 )}
-                <MensagemItem mensagem={msg} onCriarTarefa={setMsgParaTarefa} termoBusca={termoBusca} />
+                <MensagemItem
+                  mensagem={msg}
+                  onCriarTarefa={setMsgParaTarefa}
+                  termoBusca={termoBusca}
+                  instagramPost={msg.instagram_media_id && instagramPosts ? instagramPosts[msg.instagram_media_id] : null}
+                  nomeCliente={nome}
+                />
               </div>
             );
           })}
@@ -625,14 +681,14 @@ export function MensageriaWindow({
             <X size={28} />
           </button>
           <div className="flex flex-col items-center gap-4" onClick={e => e.stopPropagation()}>
-            <img
-              src={conversa.foto_perfil}
+            <FotoCascata
+              variantes={variantesFoto(conversa.foto_perfil)}
               alt={nome}
-              className="max-w-[80vw] max-h-[80vh] rounded-lg object-contain shadow-2xl"
+              className="w-[min(85vw,560px)] h-[min(85vw,560px)] max-h-[80vh] rounded-2xl object-cover shadow-2xl bg-black/50"
             />
-            <p className="text-white text-lg font-medium">{nome}</p>
+            <p className="text-white text-2xl font-medium">{nome}</p>
             {conversa.cliente_telefone && (
-              <p className="text-white/60 text-sm">{conversa.cliente_telefone}</p>
+              <p className="text-white/70 text-base">{conversa.cliente_telefone}</p>
             )}
           </div>
         </div>

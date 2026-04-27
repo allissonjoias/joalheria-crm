@@ -26,9 +26,18 @@ const MIGRATION_CICLO_VIDA_PATH = path.resolve(__dirname, '../models/migration_c
 const MIGRATION_ESTORNO_PATH = path.resolve(__dirname, '../models/migration_estorno.sql');
 const MIGRATION_META_API_PATH = path.resolve(__dirname, '../models/migration_meta_api.sql');
 const MIGRATION_AUTOMACAO_PATH = path.resolve(__dirname, '../models/migration_automacao.sql');
-const MIGRATION_MANYCHAT_PATH = path.resolve(__dirname, '../models/migration_manychat.sql');
 const MIGRATION_BRECHAS_PATH = path.resolve(__dirname, '../models/migration_brechas.sql');
 const MIGRATION_FUNIL_V2_PATH = path.resolve(__dirname, '../models/migration_funil_v2.sql');
+const MIGRATION_FUNIL_V3_PATH = path.resolve(__dirname, '../models/migration_funil_v3.sql');
+const MIGRATION_FUNIL_UNIFICADO_PATH = path.resolve(__dirname, '../models/migration_funil_unificado.sql');
+const MIGRATION_LIMPAR_FUNIL_PATH = path.resolve(__dirname, '../models/migration_limpar_funil.sql');
+const MIGRATION_AUTOMACAO_ETAPAS_PATH = path.resolve(__dirname, '../models/migration_automacao_etapas.sql');
+const MIGRATION_AUTOMACAO_GATILHOS_PATH = path.resolve(__dirname, '../models/migration_automacao_gatilhos.sql');
+const MIGRATION_AUTOMACAO_NULLABLE_PATH = path.resolve(__dirname, '../models/migration_automacao_nullable.sql');
+const MIGRATION_BANT_BONUS_PATH = path.resolve(__dirname, '../models/migration_bant_bonus.sql');
+const MIGRATION_FUNIL_BLOCOS_PATH = path.resolve(__dirname, '../models/migration_funil_blocos.sql');
+const MIGRATION_UNIPILE_PATH = path.resolve(__dirname, '../models/migration_unipile.sql');
+const MIGRATION_IG_POST_META_PATH = path.resolve(__dirname, '../models/migration_instagram_post_meta.sql');
 
 let db: SqlJsDatabase | null = null;
 
@@ -1032,6 +1041,41 @@ async function runFunilV2Migrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase)
   }
 }
 
+async function runFunilV3Migrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se ja aplicou: checar se coluna score_bant existe na pipeline
+  const cols = wrapper.prepare("PRAGMA table_info(pipeline)").all() as any[];
+  const hasScoreBant = cols.some((c: any) => c.name === 'score_bant');
+  if (hasScoreBant) return;
+
+  console.log('Rodando migration Funil V3 (campos avancados kanban)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_FUNIL_V3_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+          console.error('Funil V3 migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Funil V3 aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Funil V3:', e);
+  }
+}
+
 async function runBrechasMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
   const tableExists = wrapper.prepare(
     "SELECT name FROM sqlite_master WHERE type='table' AND name='brechas_log'"
@@ -1065,42 +1109,6 @@ async function runBrechasMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase)
     console.log('Migration Brechas Engine aplicada com sucesso!');
   } catch (e) {
     console.error('Erro ao rodar migration Brechas:', e);
-  }
-}
-
-async function runManyChatMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
-  const tableExists = wrapper.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='manychat_config'"
-  ).get();
-
-  if (tableExists) return;
-
-  console.log('Rodando migration ManyChat...');
-  try {
-    const migrationSql = fs.readFileSync(MIGRATION_MANYCHAT_PATH, 'utf-8');
-    const cleanedSql = migrationSql
-      .split('\n')
-      .filter(line => !line.trim().startsWith('--'))
-      .join('\n');
-
-    const statements = cleanedSql
-      .split(';')
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
-
-    for (const stmt of statements) {
-      try {
-        rawDb.exec(stmt + ';');
-      } catch (e: any) {
-        if (!e.message?.includes('already exists')) {
-          console.error('ManyChat migration error:', e.message);
-        }
-      }
-    }
-    saveDb();
-    console.log('Migration ManyChat aplicada com sucesso!');
-  } catch (e) {
-    console.error('Erro ao rodar migration ManyChat:', e);
   }
 }
 
@@ -1152,6 +1160,271 @@ async function runStickerMigration(wrapper: DatabaseLike, rawDb: SqlJsDatabase) 
   } catch (e) {
     console.error('Erro ao rodar migration Sticker:', e);
     // Fallback: se nao conseguir alterar constraint, stickers serao salvos como 'imagem'
+  }
+}
+
+async function runFunilUnificadoMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se ja aplicou: checar se estagio 1001 existe OU se ja tem blocos (funil v3)
+  const jaAplicou = wrapper.prepare(
+    "SELECT id FROM funil_estagios WHERE id = 1001"
+  ).get();
+  if (jaAplicou) return;
+
+  // Se ja tem blocos configurados, nao re-inserir etapas antigas
+  try {
+    const cols = wrapper.prepare("PRAGMA table_info(funil_estagios)").all() as any[];
+    const hasBloco = cols.find((c: any) => c.name === 'bloco');
+    if (hasBloco) {
+      const temBlocos = wrapper.prepare(
+        "SELECT id FROM funil_estagios WHERE funil_id = 10 AND bloco IS NOT NULL LIMIT 1"
+      ).get();
+      if (temBlocos) return;
+    }
+  } catch {}
+
+  console.log('Rodando migration Funil Unificado (17 etapas, 1 pipeline)...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_FUNIL_UNIFICADO_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+          console.error('Funil Unificado migration error:', e.message, '\nSQL:', stmt.substring(0, 80));
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Funil Unificado aplicada com sucesso!');
+  } catch (e) {
+    console.error('Erro ao rodar migration Funil Unificado:', e);
+  }
+}
+
+async function runLimparFunilMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se ainda ha ODVs finalizadas no funil 10
+  const pendentes = wrapper.prepare(
+    `SELECT COUNT(*) as total FROM pipeline
+     WHERE funil_id = 10 AND estagio IN ('Ganho', 'Sucesso', 'Recompra', 'Perdido')`
+  ).get() as any;
+
+  if (!pendentes || pendentes.total === 0) return;
+
+  console.log(`Limpando funil: movendo ${pendentes.total} ODVs finalizadas para Sucesso...`);
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_LIMPAR_FUNIL_PATH, 'utf-8');
+    const cleanedSql = migrationSql
+      .split('\n')
+      .filter(line => !line.trim().startsWith('--'))
+      .join('\n');
+
+    const statements = cleanedSql
+      .split(';')
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    for (const stmt of statements) {
+      try {
+        rawDb.exec(stmt + ';');
+      } catch (e: any) {
+        console.error('Limpar funil error:', e.message);
+      }
+    }
+    saveDb();
+    console.log('Funil limpo com sucesso!');
+  } catch (e) {
+    console.error('Erro ao limpar funil:', e);
+  }
+}
+
+async function runAutomacaoEtapasMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='automacao_etapas'"
+  ).get();
+  if (tableExists) return;
+
+  console.log('Rodando migration Automacao Etapas...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_AUTOMACAO_ETAPAS_PATH, 'utf-8');
+    const cleanedSql = migrationSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');
+    const statements = cleanedSql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('already exists')) console.error('Automacao Etapas error:', e.message);
+      }
+    }
+    saveDb();
+    console.log('Migration Automacao Etapas aplicada!');
+  } catch (e) {
+    console.error('Erro migration Automacao Etapas:', e);
+  }
+}
+
+async function runAutomacaoGatilhosMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se a coluna gatilho já existe
+  const cols = wrapper.prepare("PRAGMA table_info(automacao_etapas)").all() as any[];
+  const temGatilho = cols.some((c: any) => c.name === 'gatilho');
+  if (temGatilho) return;
+
+  console.log('Rodando migration Automacao Gatilhos...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_AUTOMACAO_GATILHOS_PATH, 'utf-8');
+    const cleanedSql = migrationSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');
+    const statements = cleanedSql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) console.error('Automacao Gatilhos error:', e.message);
+      }
+    }
+    saveDb();
+    console.log('Migration Automacao Gatilhos aplicada!');
+  } catch (e) {
+    console.error('Erro migration Automacao Gatilhos:', e);
+  }
+}
+
+async function runAutomacaoNullableMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Verificar se estagio_destino ainda tem NOT NULL
+  const cols = wrapper.prepare("PRAGMA table_info(automacao_etapas)").all() as any[];
+  const colDestino = cols.find((c: any) => c.name === 'estagio_destino');
+  if (!colDestino || colDestino.notnull === 0) return; // Já nullable
+
+  console.log('Rodando migration Automacao Nullable...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_AUTOMACAO_NULLABLE_PATH, 'utf-8');
+    const cleanedSql = migrationSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');
+    const statements = cleanedSql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('already exists')) console.error('Automacao Nullable error:', e.message);
+      }
+    }
+    saveDb();
+    console.log('Migration Automacao Nullable aplicada!');
+  } catch (e) {
+    console.error('Erro migration Automacao Nullable:', e);
+  }
+}
+
+async function runFunilBlocosMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  // Garantir coluna bloco existe
+  const cols = wrapper.prepare("PRAGMA table_info(funil_estagios)").all() as any[];
+  const hasBloco = cols.find((c: any) => c.name === 'bloco');
+  if (!hasBloco) {
+    try { rawDb.exec("ALTER TABLE funil_estagios ADD COLUMN bloco TEXT DEFAULT NULL;"); } catch {}
+  }
+
+  // Sempre limpar etapas duplicadas sem bloco (restos da migration Funil Unificado)
+  try { rawDb.exec("DELETE FROM funil_estagios WHERE funil_id = 10 AND (bloco IS NULL OR bloco = '')"); } catch {}
+
+  // Verificar se ja tem etapa 'Contato' no funil 10 (indica que migration ja aplicou corretamente)
+  const jaTemContato = wrapper.prepare(
+    "SELECT id FROM funil_estagios WHERE funil_id = 10 AND nome = 'Contato'"
+  ).get();
+  if (jaTemContato) return;
+
+  console.log('Rodando migration Funil Blocos...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_FUNIL_BLOCOS_PATH, 'utf-8');
+    const cleanedSql = migrationSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');
+    const statements = cleanedSql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+          console.error('Funil Blocos error:', stmt.substring(0, 60), e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Funil Blocos aplicada!');
+  } catch (e) {
+    console.error('Erro migration Funil Blocos:', e);
+  }
+}
+
+async function runBantBonusMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const cols = wrapper.prepare("PRAGMA table_info(sdr_lead_qualificacao)").all() as any[];
+  const hasBonus = cols.find((c: any) => c.name === 'bant_bonus_score');
+  if (hasBonus) return;
+
+  console.log('Rodando migration BANT Bonus...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_BANT_BONUS_PATH, 'utf-8');
+    const cleanedSql = migrationSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');
+    const statements = cleanedSql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) console.error('BANT Bonus error:', e.message);
+      }
+    }
+    saveDb();
+    console.log('Migration BANT Bonus aplicada!');
+  } catch (e) {
+    console.error('Erro migration BANT Bonus:', e);
+  }
+}
+
+async function runIgPostMetaMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const cols = wrapper.prepare("PRAGMA table_info(instagram_posts)").all() as any[];
+  const colsConv = wrapper.prepare("PRAGMA table_info(conversas)").all() as any[];
+  const colsMsg = wrapper.prepare("PRAGMA table_info(mensagens)").all() as any[];
+  const hasThumb = cols.some((c: any) => c.name === 'thumbnail_url');
+  const hasThumbLocal = cols.some((c: any) => c.name === 'thumbnail_url_local');
+  const hasMediaIdConv = colsConv.some((c: any) => c.name === 'instagram_media_id');
+  const hasMediaIdMsg = colsMsg.some((c: any) => c.name === 'instagram_media_id');
+  if (hasThumb && hasMediaIdConv && hasMediaIdMsg && hasThumbLocal) return;
+
+  console.log('Rodando migration Instagram Post Meta...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_IG_POST_META_PATH, 'utf-8');
+    const cleaned = migrationSql.split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
+    const stmts = cleaned.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of stmts) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('duplicate column') && !e.message?.includes('already exists')) {
+          console.error('IG Post Meta migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Instagram Post Meta aplicada!');
+  } catch (e) {
+    console.error('Erro migration IG Post Meta:', e);
+  }
+}
+
+async function runUnipileMigrations(wrapper: DatabaseLike, rawDb: SqlJsDatabase) {
+  const tableExists = wrapper.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='unipile_config'"
+  ).get();
+  if (tableExists) return;
+
+  console.log('Rodando migration Unipile...');
+  try {
+    const migrationSql = fs.readFileSync(MIGRATION_UNIPILE_PATH, 'utf-8');
+    const cleanedSql = migrationSql.split('\n').filter(line => !line.trim().startsWith('--')).join('\n');
+    const statements = cleanedSql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    for (const stmt of statements) {
+      try { rawDb.exec(stmt + ';'); } catch (e: any) {
+        if (!e.message?.includes('already exists') && !e.message?.includes('duplicate column')) {
+          console.error('Unipile migration error:', e.message);
+        }
+      }
+    }
+    saveDb();
+    console.log('Migration Unipile aplicada!');
+  } catch (e) {
+    console.error('Erro migration Unipile:', e);
   }
 }
 
@@ -1218,11 +1491,26 @@ export function initDatabase(): Promise<DatabaseLike> {
     await runEstornoMigrations(wrapper, db);
     await runMetaApiMigrations(wrapper, db);
     await runAutomacaoMigrations(wrapper, db);
-    await runManyChatMigrations(wrapper, db);
+    // Limpar tabelas ManyChat (integracao removida)
+    try {
+      db.exec('DROP TABLE IF EXISTS manychat_config');
+      db.exec('DROP TABLE IF EXISTS manychat_mapeamento');
+      saveDb();
+    } catch {}
     await runBrechasMigrations(wrapper, db);
     await runFunilV2Migrations(wrapper, db);
+    await runFunilV3Migrations(wrapper, db);
     await runConfigGeralMigrations(wrapper, db);
     await runStickerMigration(wrapper, db);
+    await runFunilUnificadoMigrations(wrapper, db);
+    await runLimparFunilMigrations(wrapper, db);
+    await runAutomacaoEtapasMigrations(wrapper, db);
+    await runAutomacaoGatilhosMigrations(wrapper, db);
+    await runAutomacaoNullableMigrations(wrapper, db);
+    await runBantBonusMigrations(wrapper, db);
+    await runFunilBlocosMigrations(wrapper, db);
+    await runUnipileMigrations(wrapper, db);
+    await runIgPostMetaMigrations(wrapper, db);
 
     // Construir cache de tabelas com criado_em para o interceptor de INSERT
     buildTabelasCriadoEmCache(db);

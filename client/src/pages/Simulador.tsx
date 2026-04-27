@@ -56,47 +56,52 @@ const DADOS_EXTRAIDOS: DadoExtraido[] = [
 ];
 
 const BANT_SCORES = {
-  budget: { valor: 30, max: 35, label: 'Orcamento definido (R$4-6k)' },
-  authority: { valor: 12, max: 15, label: 'Decisora (menciona noivo)' },
-  need: { valor: 22, max: 25, label: 'Necessidade clara (casamento)' },
-  timeline: { valor: 20, max: 25, label: 'Prazo definido (outubro)' },
-  bonus: { valor: 25, max: 50, label: 'Engajamento alto (perguntas)' },
+  budget: { valor: 25, max: 30, label: 'Orcamento definido (R$4-6k)' },
+  authority: { valor: 10, max: 15, label: 'Decisora (menciona noivo)' },
+  need: { valor: 28, max: 30, label: 'Necessidade clara (casamento)' },
+  timeline: { valor: 16, max: 20, label: 'Prazo definido (outubro)' },
+  bonus: { valor: 4, max: 5, label: 'Engajamento alto (perguntas)' },
 };
 
 const ETAPAS: EtapaSimulacao[] = [
-  { id: 'msg', titulo: 'Lead chega via WhatsApp', descricao: 'Cliente envia mensagem pelo WhatsApp. O CRM recebe e cria a conversa automaticamente.', icone: MessageSquare, cor: 'emerald', duracao: 2000 },
-  { id: 'ia_responde', titulo: 'IA SDR auto-responde', descricao: 'Com o Modo Auto ativado, a IA analisa a mensagem e responde de forma natural, fazendo perguntas de qualificacao.', icone: Bot, cor: 'violet', duracao: 8000 },
-  { id: 'extracao', titulo: 'Extracao de dados pela IA', descricao: 'Em background, a IA extrai dados estruturados da conversa: nome, produto, orcamento, prazo, forma de pagamento.', icone: Brain, cor: 'blue', duracao: 3000 },
-  { id: 'cliente_criado', titulo: 'Perfil do cliente criado', descricao: 'Cliente automaticamente cadastrado com dados extraidos. Campos preenchidos pela IA ficam marcados com badge violeta.', icone: UserPlus, cor: 'cyan', duracao: 2000 },
-  { id: 'odv', titulo: 'ODV criada no pipeline', descricao: 'Oportunidade de Venda criada automaticamente no funil, com valor estimado e todos os campos preenchidos pela IA.', icone: Kanban, cor: 'amber', duracao: 2000 },
-  { id: 'bant', titulo: 'Scoring BANT calculado', descricao: 'Qualificacao automatica: Budget (30), Authority (12), Need (22), Timeline (20) + Bonus (25) = 109/150 QUENTE', icone: Target, cor: 'red', duracao: 2500 },
-  { id: 'tarefa', titulo: 'Tarefas auto-criadas', descricao: 'Sistema cria tarefas automaticas: enviar fotos das aliancas, follow-up em 24h, lembrete pre-casamento.', icone: ClipboardCheck, cor: 'orange', duracao: 2000 },
-  { id: 'distribuicao', titulo: 'Lead distribuido', descricao: 'Lead QUENTE distribuido para a vendedora com menos ODVs em aberto (round-robin ou menos ocupada).', icone: Send, cor: 'pink', duracao: 1500 },
-  { id: 'ganho', titulo: 'Venda fechada!', descricao: 'Vendedora fecha a venda. O sistema auto-cria registro de venda e dispara o ciclo de vida pos-venda.', icone: CheckCircle2, cor: 'green', duracao: 2000 },
-  { id: 'pos_venda', titulo: 'Pos-venda automatico', descricao: 'ODV auto-move para "Preparando Pedido". Tarefas criadas: separar pedido, enviar NF, confirmar endereco.', icone: Truck, cor: 'violet', duracao: 2500 },
-  { id: 'nutricao', titulo: 'Nutricao agendada', descricao: 'Apos entrega, sistema agenda contatos em 30, 60 e 90 dias. Cada contato move a ODV e cria tarefa de follow-up.', icone: Heart, cor: 'amber', duracao: 2500 },
-  { id: 'recompra', titulo: 'Oportunidade de recompra', descricao: 'Aos 90 dias, se cliente engajou, nova ODV de recompra e criada automaticamente. O ciclo recomeca!', icone: RefreshCw, cor: 'rose', duracao: 2000 },
+  { id: 'msg', titulo: 'Lead chega - Contato', descricao: 'Cliente envia mensagem no WhatsApp. ODV criada automaticamente no bloco Qualificacao > sub-etapa Contato.', icone: MessageSquare, cor: 'emerald', duracao: 4000 },
+  { id: 'bant_realtime', titulo: 'BANT preenchido em tempo real', descricao: 'ODV auto-move para sub-etapa BANT. A cada resposta do cliente, o Agente SDR preenche um campo do BANT (Necessidade, Orcamento, Decisor, Prazo, Bonus). Dados extraidos em paralelo.', icone: Target, cor: 'violet', duracao: 30000 },
+  { id: 'cliente_criado', titulo: 'Perfil do cliente cadastrado', descricao: 'Cliente criado automaticamente com todos os dados extraidos pela IA. Campos auto-preenchidos ficam marcados com badge violeta.', icone: UserPlus, cor: 'cyan', duracao: 4000 },
+  { id: 'qualificado', titulo: 'Score 83 QUENTE - Handoff SDR > Vendas', descricao: 'Com score BANT >= 80, a ODV move para sub-etapa Qualificado. Agente SDR emite evento "lead_qualificado" e transfere o atendimento para o Agente Vendas.', icone: ArrowRight, cor: 'indigo', duracao: 5000 },
+  { id: 'tarefa', titulo: 'Tarefas auto-criadas', descricao: 'Sistema cria tarefas automaticas: enviar fotos das aliancas, follow-up em 24h, lembrete pre-casamento.', icone: ClipboardCheck, cor: 'orange', duracao: 4000 },
+  { id: 'distribuicao', titulo: 'Lead distribuido', descricao: 'Lead QUENTE distribuido para a vendedora com menos ODVs em aberto (round-robin ou menos ocupada).', icone: Send, cor: 'pink', duracao: 3500 },
+  { id: 'negociacao', titulo: 'Agente Vendas negocia', descricao: 'Agente Vendas envia orcamento, responde objecoes, oferece parcelamento. ODV passa por Orcamento > Negociacao > Aguardando Pagamento.', icone: CreditCard, cor: 'amber', duracao: 7000 },
+  { id: 'ganho', titulo: 'Venda fechada (Ganho)', descricao: 'Pagamento confirmado. ODV vai para sub-etapa Ganho no bloco Fechamento. Sistema auto-cria registro de venda e dispara handoff para Logistica.', icone: CheckCircle2, cor: 'green', duracao: 5000 },
+  { id: 'logistica', titulo: 'Agente Logistica assume', descricao: 'ODV entra no bloco Logistica: Aguardando Envio > Enviado > Entregue. Agente Logistica notifica cliente com rastreio e prazos.', icone: Truck, cor: 'blue', duracao: 6500 },
+  { id: 'sucesso', titulo: 'Agente Sucesso valida', descricao: 'Apos entrega, ODV vai para bloco Sucesso do Cliente. Agente Sucesso pergunta sobre satisfacao, resolve problemas, inicia fidelizacao.', icone: Heart, cor: 'emerald', duracao: 5000 },
+  { id: 'nutricao', titulo: 'Agente Nutricao cuida', descricao: 'ODV entra no bloco Nutricao > Recompra. Agente Nutricao agenda contatos 30/60/90 dias com conteudo personalizado.', icone: RefreshCw, cor: 'pink', duracao: 6000 },
+  { id: 'recompra', titulo: 'Nova ODV de recompra', descricao: 'Aos 90 dias, se cliente engajou, nova ODV criada automaticamente no bloco Qualificacao. O ciclo recomeca com o Agente SDR!', icone: Sparkles, cor: 'rose', duracao: 4500 },
 ];
 
+// Novo pipeline: 19 etapas em 6 blocos
 const ESTAGIOS_PIPELINE = [
-  { nome: 'Lead', fase: 'venda' },
-  { nome: 'Interessado', fase: 'venda' },
-  { nome: 'Negociacao', fase: 'venda' },
-  { nome: 'Vendido', fase: 'venda' },
-  { nome: 'Prep. Pedido', fase: 'pos_venda' },
-  { nome: 'Enviado', fase: 'pos_venda' },
-  { nome: 'Entregue', fase: 'pos_venda' },
-  { nome: 'Nutricao 30d', fase: 'nutricao' },
-  { nome: 'Nutricao 60d', fase: 'nutricao' },
-  { nome: 'Nutricao 90d', fase: 'nutricao' },
-  { nome: 'Recompra', fase: 'recompra' },
+  { nome: 'Contato', bloco: 'Qualificacao' },
+  { nome: 'BANT', bloco: 'Qualificacao' },
+  { nome: 'Qualificado', bloco: 'Qualificacao' },
+  { nome: 'Orcamento', bloco: 'Fechamento' },
+  { nome: 'Negociacao', bloco: 'Fechamento' },
+  { nome: 'Aguardando Pagamento', bloco: 'Fechamento' },
+  { nome: 'Ganho', bloco: 'Fechamento' },
+  { nome: 'Aguardando Envio', bloco: 'Logistica' },
+  { nome: 'Enviado', bloco: 'Logistica' },
+  { nome: 'Entregue', bloco: 'Logistica' },
+  { nome: 'Sucesso', bloco: 'Sucesso do Cliente' },
+  { nome: 'Pos-venda', bloco: 'Sucesso do Cliente' },
+  { nome: 'Recompra', bloco: 'Nutricao' },
 ];
 
 const FASE_CORES: Record<string, string> = {
-  venda: 'amber',
-  pos_venda: 'violet',
-  nutricao: 'orange',
-  recompra: 'pink',
+  'Qualificacao': 'indigo',
+  'Fechamento': 'amber',
+  'Logistica': 'blue',
+  'Sucesso do Cliente': 'emerald',
+  'Nutricao': 'pink',
+  'Arquivo': 'gray',
 };
 
 
@@ -108,7 +113,8 @@ export default function Simulador() {
   const [mensagensVisiveis, setMensagensVisiveis] = useState<number>(0);
   const [dadosVisiveis, setDadosVisiveis] = useState<number>(0);
   const [bantAnimado, setBantAnimado] = useState(false);
-  const [bantTotal, setBantTotal] = useState(0);
+  const [bantAtual, setBantAtual] = useState<Record<string, number>>({ budget: 0, authority: 0, need: 0, timeline: 0, bonus: 0 });
+  const bantTotal = bantAtual.budget + bantAtual.authority + bantAtual.need + bantAtual.timeline + bantAtual.bonus;
   const [estagioAtual, setEstagioAtual] = useState(0);
   const [tarefasVisiveis, setTarefasVisiveis] = useState(0);
   const [etapasCompletas, setEtapasCompletas] = useState<Set<string>>(new Set());
@@ -135,7 +141,7 @@ export default function Simulador() {
     setMensagensVisiveis(0);
     setDadosVisiveis(0);
     setBantAnimado(false);
-    setBantTotal(0);
+    setBantAtual({ budget: 0, authority: 0, need: 0, timeline: 0, bonus: 0 });
     setEstagioAtual(0);
     setTarefasVisiveis(0);
     setTarefasPosVendaVisiveis(0);
@@ -147,114 +153,174 @@ export default function Simulador() {
     setEtapasCompletas(prev => new Set([...prev, id]));
   };
 
+  // Anima preenchimento de um campo BANT de forma progressiva
+  const animarBant = async (campo: keyof typeof BANT_SCORES, target: number) => {
+    for (let v = 1; v <= target; v++) {
+      await sleep(80);
+      setBantAtual(prev => ({ ...prev, [campo]: v }));
+    }
+  };
+
   const iniciarSimulacao = async () => {
     resetar();
     setRodando(true);
 
-    // Etapa 1: Lead chega
+    // ========== ETAPA 0: Lead chega - ODV em Contato ==========
     setEtapaAtual(0);
-    await sleep(500);
-    setMensagensVisiveis(1);
+    setEstagioAtual(0); // Contato
     await sleep(1500);
+    setMensagensVisiveis(1); // Cliente: "Oi, vi alianca Instagram"
+    setDadosVisiveis(1); // Forma atend: WhatsApp
+    await sleep(3500);
     completarEtapa('msg');
 
-    // Etapa 2: IA responde (conversa completa)
+    // ========== ETAPA 1: BANT em tempo real ==========
     setEtapaAtual(1);
-    for (let i = 2; i <= CONVERSA_SIMULADA.length; i++) {
-      await sleep(800);
-      setMensagensVisiveis(i);
-    }
-    await sleep(500);
-    completarEtapa('ia_responde');
+    setBantAnimado(true);
+    await sleep(1500);
+    setEstagioAtual(1); // Move para BANT
+    await sleep(2500);
 
-    // Etapa 3: Extracao
-    setEtapaAtual(2);
-    for (let i = 1; i <= DADOS_EXTRAIDOS.length; i++) {
-      await sleep(350);
-      setDadosVisiveis(i);
-    }
-    await sleep(500);
-    completarEtapa('extracao');
+    // Msg 2 (IA): "Para noivado ou casamento?"
+    setMensagensVisiveis(2);
+    await sleep(3000);
 
-    // Etapa 4: Cliente criado
-    setEtapaAtual(3);
+    // Msg 3 (cliente): "casamento, ouro 18k com diamantes"
+    // → Preenche NECESSIDADE (campo BANT) em tempo real
+    setMensagensVisiveis(3);
+    await sleep(1500);
+    setDadosVisiveis(3); // Produto + Ocasiao aparecem
+    await animarBant('need', BANT_SCORES.need.valor);
     await sleep(2000);
+
+    // Msg 4 (IA): "Faixa de orcamento?"
+    setMensagensVisiveis(4);
+    await sleep(3000);
+
+    // Msg 5 (cliente): "4-6 mil, parcelar"
+    // → Preenche ORCAMENTO em tempo real
+    setMensagensVisiveis(5);
+    await sleep(1500);
+    setDadosVisiveis(5); // Orcamento + Parcelas
+    await animarBant('budget', BANT_SCORES.budget.valor);
+    await sleep(2000);
+
+    // Msg 6 (IA): "Em que mes e o casamento?"
+    setMensagensVisiveis(6);
+    await sleep(3000);
+
+    // Msg 7 (cliente): "Outubro. Sou Camila, noivo Rafael"
+    // → Preenche DECISOR (menciona noivo) + PRAZO (outubro)
+    setMensagensVisiveis(7);
+    await sleep(1500);
+    setDadosVisiveis(7); // Nome + Prazo
+    await animarBant('authority', BANT_SCORES.authority.valor);
+    await sleep(500);
+    await animarBant('timeline', BANT_SCORES.timeline.valor);
+    await sleep(2000);
+
+    // Msg 8 (IA): "Vou separar opcoes especiais"
+    setMensagensVisiveis(8);
+    await sleep(3000);
+
+    // Msg 9 (cliente): "Voces entregam? Campinas"
+    // → Preenche BONUS (engajamento alto - faz perguntas)
+    setMensagensVisiveis(9);
+    await sleep(1500);
+    setDadosVisiveis(DADOS_EXTRAIDOS.length); // Todos os campos preenchidos
+    await animarBant('bonus', BANT_SCORES.bonus.valor);
+    await sleep(2000);
+
+    // Msg 10 (IA): "Entregamos, frete cortesia"
+    setMensagensVisiveis(10);
+    await sleep(2500);
+    completarEtapa('bant_realtime');
+
+    // ========== ETAPA 2: Cliente criado (perfil completo) ==========
+    setEtapaAtual(2);
+    await sleep(4000);
     completarEtapa('cliente_criado');
 
-    // Etapa 5: ODV criada
+    // ========== ETAPA 3: Score >= 80 - Handoff SDR > Vendas ==========
+    setEtapaAtual(3);
+    await sleep(2500);
+    setEstagioAtual(2); // Qualificado
+    await sleep(3500);
+    completarEtapa('qualificado');
+
+    // ========== ETAPA 4: Tarefas auto-criadas ==========
     setEtapaAtual(4);
-    setEstagioAtual(1);
-    await sleep(2000);
-    completarEtapa('odv');
-
-    // Etapa 6: BANT
-    setEtapaAtual(5);
-    setBantAnimado(true);
-    const total = Object.values(BANT_SCORES).reduce((s, v) => s + v.valor, 0);
-    for (let i = 0; i <= total; i += 3) {
-      await sleep(20);
-      setBantTotal(Math.min(i, total));
-    }
-    setBantTotal(total);
-    await sleep(1000);
-    completarEtapa('bant');
-
-    // Etapa 7: Tarefas
-    setEtapaAtual(6);
     for (let i = 1; i <= 3; i++) {
-      await sleep(600);
+      await sleep(1300);
       setTarefasVisiveis(i);
     }
-    await sleep(500);
+    await sleep(1500);
     completarEtapa('tarefa');
 
-    // Etapa 8: Distribuicao + mover pipeline
-    setEtapaAtual(7);
-    await sleep(800);
-    setEstagioAtual(2); // Interessado
-    await sleep(700);
+    // ========== ETAPA 5: Distribuicao ==========
+    setEtapaAtual(5);
+    await sleep(2500);
     completarEtapa('distribuicao');
 
-    // Etapa 9: Venda fechada
-    setEtapaAtual(8);
-    await sleep(600);
-    setEstagioAtual(3); // Vendido
-    await sleep(1400);
+    // ========== ETAPA 6: Agente Vendas negocia ==========
+    setEtapaAtual(6);
+    await sleep(1500);
+    setEstagioAtual(3); // Orcamento
+    await sleep(2500);
+    setEstagioAtual(4); // Negociacao
+    await sleep(2500);
+    setEstagioAtual(5); // Aguardando Pagamento
+    await sleep(2000);
+    completarEtapa('negociacao');
+
+    // ========== ETAPA 7: Ganho ==========
+    setEtapaAtual(7);
+    await sleep(2000);
+    setEstagioAtual(6); // Ganho
+    await sleep(3500);
     completarEtapa('ganho');
 
-    // Etapa 10: Pos-venda automatico
-    setEtapaAtual(9);
-    await sleep(500);
-    setEstagioAtual(4); // Prep. Pedido
+    // ========== ETAPA 8: Agente Logistica ==========
+    setEtapaAtual(8);
+    await sleep(1500);
+    setEstagioAtual(7); // Aguardando Envio
     for (let i = 1; i <= 3; i++) {
-      await sleep(500);
+      await sleep(1100);
       setTarefasPosVendaVisiveis(i);
     }
-    await sleep(400);
-    setEstagioAtual(5); // Enviado
-    await sleep(600);
-    setEstagioAtual(6); // Entregue
-    await sleep(400);
-    completarEtapa('pos_venda');
+    await sleep(1500);
+    setEstagioAtual(8); // Enviado
+    await sleep(2000);
+    setEstagioAtual(9); // Entregue
+    await sleep(1500);
+    completarEtapa('logistica');
 
-    // Etapa 11: Nutricao agendada
+    // ========== ETAPA 9: Agente Sucesso ==========
+    setEtapaAtual(9);
+    await sleep(2000);
+    setEstagioAtual(10); // Sucesso
+    await sleep(1500);
+    setEstagioAtual(11); // Pos-venda
+    await sleep(2500);
+    completarEtapa('sucesso');
+
+    // ========== ETAPA 10: Agente Nutricao ==========
     setEtapaAtual(10);
+    await sleep(1500);
+    setEstagioAtual(12); // Recompra
     for (let i = 1; i <= 3; i++) {
-      await sleep(700);
+      await sleep(1500);
       setNutricaoVisiveis(i);
-      setEstagioAtual(6 + i); // 7=30d, 8=60d, 9=90d
     }
-    await sleep(500);
+    await sleep(1500);
     completarEtapa('nutricao');
 
-    // Etapa 12: Recompra
+    // ========== ETAPA 11: Nova ODV de recompra ==========
     setEtapaAtual(11);
-    await sleep(800);
-    setEstagioAtual(10); // Recompra
-    await sleep(1200);
+    await sleep(3000);
     completarEtapa('recompra');
 
-    await sleep(500);
+    await sleep(1500);
     setRodando(false);
   };
 
@@ -262,12 +328,18 @@ export default function Simulador() {
     setMensagensVisiveis(CONVERSA_SIMULADA.length);
     setDadosVisiveis(DADOS_EXTRAIDOS.length);
     setBantAnimado(true);
-    setBantTotal(Object.values(BANT_SCORES).reduce((s, v) => s + v.valor, 0));
-    setEstagioAtual(10);
+    setBantAtual({
+      budget: BANT_SCORES.budget.valor,
+      authority: BANT_SCORES.authority.valor,
+      need: BANT_SCORES.need.valor,
+      timeline: BANT_SCORES.timeline.valor,
+      bonus: BANT_SCORES.bonus.valor,
+    });
+    setEstagioAtual(ESTAGIOS_PIPELINE.length - 1);
     setTarefasVisiveis(3);
     setTarefasPosVendaVisiveis(3);
     setNutricaoVisiveis(3);
-    setEtapaAtual(11);
+    setEtapaAtual(ETAPAS.length - 1);
     setEtapasCompletas(new Set(ETAPAS.map(e => e.id)));
     setRodando(false);
   };
@@ -473,31 +545,34 @@ export default function Simulador() {
                       bantTotal >= 55 ? 'bg-yellow-100 text-yellow-700' :
                       'bg-blue-100 text-blue-700'
                     }`}>
-                      {bantTotal}/150 {labelBant}
+                      {bantTotal}/100 {labelBant}
                     </span>
                   )}
                 </h3>
                 <div className="space-y-2">
-                  {Object.entries(BANT_SCORES).map(([key, s]) => (
-                    <div key={key} className="space-y-0.5">
-                      <div className="flex justify-between text-[10px]">
-                        <span className="text-gray-500 uppercase font-medium">{key === 'bonus' ? 'Engajamento' : key}</span>
-                        <span className="text-gray-400">{s.valor}/{s.max}</span>
+                  {Object.entries(BANT_SCORES).map(([key, s]) => {
+                    const atual = bantAtual[key] || 0;
+                    return (
+                      <div key={key} className="space-y-0.5">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-gray-500 uppercase font-medium">{key === 'bonus' ? 'Engajamento' : key === 'authority' ? 'Decisor' : key === 'need' ? 'Necessidade' : key === 'timeline' ? 'Prazo' : 'Orcamento'}</span>
+                          <span className={`font-bold ${atual > 0 ? 'text-gray-700' : 'text-gray-300'}`}>{atual}/{s.max}</span>
+                        </div>
+                        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              key === 'budget' ? 'bg-green-400' :
+                              key === 'authority' ? 'bg-blue-400' :
+                              key === 'need' ? 'bg-purple-400' :
+                              key === 'timeline' ? 'bg-amber-400' : 'bg-pink-400'
+                            }`}
+                            style={{ width: `${(atual / s.max) * 100}%` }}
+                          />
+                        </div>
+                        <p className={`text-[10px] ${atual > 0 ? 'text-gray-500' : 'text-gray-300'}`}>{atual > 0 ? s.label : 'Aguardando resposta do cliente...'}</p>
                       </div>
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-1000 ${
-                            key === 'budget' ? 'bg-green-400' :
-                            key === 'authority' ? 'bg-blue-400' :
-                            key === 'need' ? 'bg-purple-400' :
-                            key === 'timeline' ? 'bg-amber-400' : 'bg-pink-400'
-                          }`}
-                          style={{ width: bantTotal > 0 ? `${(s.valor / s.max) * 100}%` : '0%' }}
-                        />
-                      </div>
-                      <p className="text-[10px] text-gray-400">{s.label}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -506,40 +581,40 @@ export default function Simulador() {
           {/* Coluna direita - Pipeline + Tarefas */}
           <div className="lg:col-span-3 space-y-4">
             {/* Mini Pipeline - Ciclo de Vida */}
-            {estagioAtual > 0 && (
+            {estagioAtual >= 0 && (
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 animate-fade-in">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
                   <Kanban size={16} className="text-amber-500" />
-                  Ciclo de Vida
+                  Funil em Blocos
                 </h3>
                 <div className="space-y-1">
                   {ESTAGIOS_PIPELINE.map((est, i) => {
                     const ativo = i === estagioAtual;
                     const passado = i < estagioAtual;
-                    const faseAnterior = i > 0 ? ESTAGIOS_PIPELINE[i - 1].fase : null;
-                    const mostrarFase = est.fase !== faseAnterior;
-                    const corFase = FASE_CORES[est.fase] || 'gray';
+                    const blocoAnterior = i > 0 ? ESTAGIOS_PIPELINE[i - 1].bloco : null;
+                    const mostrarBloco = est.bloco !== blocoAnterior;
+                    const corBloco = FASE_CORES[est.bloco] || 'gray';
                     if (i > estagioAtual + 2 && !passado && !ativo) return null;
 
                     return (
                       <div key={est.nome}>
-                        {mostrarFase && (
-                          <div className={`text-[9px] font-bold uppercase tracking-wider text-${corFase}-500 mt-2 mb-1 flex items-center gap-1`}>
-                            <div className={`w-full h-px bg-${corFase}-200`} />
-                            <span className="whitespace-nowrap">{est.fase === 'venda' ? 'Venda' : est.fase === 'pos_venda' ? 'Pos-Venda' : est.fase === 'nutricao' ? 'Nutricao' : 'Recompra'}</span>
-                            <div className={`w-full h-px bg-${corFase}-200`} />
+                        {mostrarBloco && (
+                          <div className={`text-[9px] font-bold uppercase tracking-wider text-${corBloco}-500 mt-2 mb-1 flex items-center gap-1`}>
+                            <div className={`w-full h-px bg-${corBloco}-200`} />
+                            <span className="whitespace-nowrap">{est.bloco}</span>
+                            <div className={`w-full h-px bg-${corBloco}-200`} />
                           </div>
                         )}
                         <div className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-all duration-500 ${
-                          ativo ? `bg-${corFase}-50 border border-${corFase}-200 font-semibold text-${corFase}-700` :
+                          ativo ? `bg-${corBloco}-50 border border-${corBloco}-200 font-semibold text-${corBloco}-700` :
                           passado ? 'bg-green-50 text-green-600' :
                           'bg-gray-50 text-gray-400'
                         }`}>
                           {passado ? <CheckCircle2 size={11} className="text-green-500" /> :
-                           ativo ? <ArrowRight size={11} className={`text-${corFase}-500 animate-pulse`} /> :
+                           ativo ? <ArrowRight size={11} className={`text-${corBloco}-500 animate-pulse`} /> :
                            <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />}
                           <span className="text-[11px]">{est.nome}</span>
-                          {ativo && <span className={`ml-auto text-[9px] bg-${corFase}-100 text-${corFase}-600 px-1 py-0.5 rounded`}>atual</span>}
+                          {ativo && <span className={`ml-auto text-[9px] bg-${corBloco}-100 text-${corBloco}-600 px-1 py-0.5 rounded`}>atual</span>}
                         </div>
                       </div>
                     );
@@ -686,9 +761,9 @@ export default function Simulador() {
                 {[
                   { num: '10', label: 'Mensagens IA', cor: 'emerald' },
                   { num: '8', label: 'Campos auto-fill', cor: 'blue' },
-                  { num: '109', label: 'Score BANT', cor: 'red' },
-                  { num: '6', label: 'Tarefas auto', cor: 'orange' },
-                  { num: '4', label: 'Fases do ciclo', cor: 'violet' },
+                  { num: '83', label: 'Score BANT /100', cor: 'red' },
+                  { num: '5', label: 'Agentes IA', cor: 'indigo' },
+                  { num: '6', label: 'Blocos do Funil', cor: 'violet' },
                 ].map((m) => (
                   <div key={m.label} className={`text-center p-3 bg-white rounded-lg border border-${m.cor}-100`}>
                     <p className={`text-2xl font-bold text-${m.cor}-600`}>{m.num}</p>
@@ -697,16 +772,16 @@ export default function Simulador() {
                 ))}
               </div>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 bg-white rounded-lg border border-amber-100">
+                <div className="p-3 bg-white rounded-lg border border-indigo-100">
                   <p className="text-xs text-gray-600">
-                    <strong className="text-amber-600">Funil unico continuo</strong> - A ODV flui automaticamente por Venda → Pos-venda → Nutricao → Recompra.
-                    Sem trocar de funil, sem perder o historico.
+                    <strong className="text-indigo-600">Agentes especializados</strong> - SDR qualifica, Vendas negocia, Logistica entrega,
+                    Sucesso fideliza e Nutricao faz recompra. Cada um expert na sua fase.
                   </p>
                 </div>
                 <div className="p-3 bg-white rounded-lg border border-pink-100">
                   <p className="text-xs text-gray-600">
-                    <strong className="text-pink-600">Recompra automatica</strong> - Apos 90 dias de nutricao, o sistema cria nova ODV de recompra.
-                    O ciclo recomeca sem nenhuma acao manual.
+                    <strong className="text-pink-600">Handoffs automaticos</strong> - Ao final de cada bloco, o agente emite um evento
+                    e transfere o atendimento para o proximo especialista. Zero acao manual.
                   </p>
                 </div>
               </div>

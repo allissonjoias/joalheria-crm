@@ -6,15 +6,24 @@ import { cicloVidaService } from '../services/ciclo-vida.service';
 export class PipelineController {
   listar(req: Request, res: Response) {
     const db = getDb();
+    const limite = Math.min(Number(req.query.limite) || 200, 2000);
     let query = `
       SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone,
         u.nome as vendedor_nome,
         CASE WHEN v.id IS NOT NULL THEN 1 ELSE 0 END as venda_registrada,
-        v.data_venda as data_venda
+        v.data_venda as data_venda,
+        q.lead_score as bant_lead_score,
+        q.classificacao as bant_classificacao,
+        q.bant_budget, q.bant_budget_score,
+        q.bant_authority, q.bant_authority_score,
+        q.bant_need, q.bant_need_score,
+        q.bant_timeline, q.bant_timeline_score,
+        q.bant_bonus_score
       FROM pipeline p
       LEFT JOIN clientes c ON p.cliente_id = c.id
       LEFT JOIN usuarios u ON p.vendedor_id = u.id
       LEFT JOIN vendas v ON v.pipeline_id = p.id
+      LEFT JOIN sdr_lead_qualificacao q ON q.cliente_id = p.cliente_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -29,7 +38,24 @@ export class PipelineController {
       params.push(req.usuario.id);
     }
 
-    query += ' ORDER BY p.criado_em DESC';
+    if (req.query.estagio) {
+      query += ' AND p.estagio = ?';
+      params.push(req.query.estagio);
+    }
+
+    if (req.query.busca) {
+      const termo = `%${req.query.busca}%`;
+      query += ' AND (p.titulo LIKE ? OR c.nome LIKE ? OR c.telefone LIKE ? OR p.produto_interesse LIKE ?)';
+      params.push(termo, termo, termo, termo);
+    }
+
+    // Excluir estagios de arquivo (finalizados) do kanban, a menos que filtro especifico
+    if (!req.query.estagio && !req.query.incluir_arquivo) {
+      query += ` AND p.estagio NOT IN ('Perdido', 'Opt-out', 'Completo')`;
+    }
+
+    query += ` ORDER BY p.criado_em DESC LIMIT ${limite}`;
+
     const odvs = db.prepare(query).all(...params);
     res.json(odvs);
   }
@@ -79,6 +105,11 @@ export class PipelineController {
       'desconto', 'parcelas', 'forma_pagamento', 'valor_frete',
       'endereco_entrega', 'data_prevista_entrega', 'data_envio', 'transportador',
       'observacao_pedido', 'tipo_cliente',
+      // Funil V3
+      'score_bant', 'classificacao', 'canal_origem', 'perfil', 'decisor',
+      'orcamento_declarado', 'ocasiao', 'prazo', 'opt_out', 'opt_out_data',
+      'tentativas_reabordagem', 'forma_envio', 'codigo_rastreio', 'data_entrega',
+      'entrega_confirmada', 'motivo_pos_venda', 'data_entrada_pos_venda',
     ];
 
     for (const campo of permitidos) {
@@ -188,6 +219,73 @@ export class PipelineController {
       LEFT JOIN clientes c ON p.cliente_id = c.id WHERE p.id = ?
     `).get(novoId);
     res.status(201).json(odv);
+  }
+
+  metricas(req: Request, res: Response) {
+    const db = getDb();
+    const funilId = Number(req.query.funil_id) || 1;
+
+    // Total de leads ativos no pipeline
+    const totais = db.prepare(`
+      SELECT COUNT(*) as total,
+        COALESCE(SUM(valor), 0) as valor_total,
+        COALESCE(AVG(valor), 0) as ticket_medio
+      FROM pipeline WHERE funil_id = ?
+    `).get(funilId) as any;
+
+    // Ganhos (estagios do tipo 'ganho')
+    const ganhos = db.prepare(`
+      SELECT COUNT(*) as total, COALESCE(SUM(p.valor), 0) as valor
+      FROM pipeline p
+      JOIN funil_estagios e ON p.estagio = e.nome AND e.funil_id = p.funil_id
+      WHERE p.funil_id = ? AND e.tipo = 'ganho'
+    `).get(funilId) as any;
+
+    // Taxa de conversao
+    const taxaConversao = totais.total > 0 ? ((ganhos.total / totais.total) * 100) : 0;
+
+    // Leads em risco: aguardando pagamento > 48h
+    const emRisco = db.prepare(`
+      SELECT COUNT(*) as total FROM pipeline
+      WHERE funil_id = ? AND estagio = 'Aguardando Pagamento'
+        AND datetime(atualizado_em) < datetime('now', '-48 hours')
+    `).get(funilId) as any;
+
+    // Tempo medio de fechamento (dias entre criacao e ganho)
+    const tempoMedio = db.prepare(`
+      SELECT AVG(julianday(h.criado_em) - julianday(p.criado_em)) as dias
+      FROM pipeline_historico h
+      JOIN pipeline p ON h.pipeline_id = p.id
+      JOIN funil_estagios e ON h.estagio_novo = e.nome AND e.funil_id = p.funil_id
+      WHERE p.funil_id = ? AND e.tipo = 'ganho'
+    `).get(funilId) as any;
+
+    // Por classificacao
+    const porClassificacao = db.prepare(`
+      SELECT classificacao, COUNT(*) as total FROM pipeline
+      WHERE funil_id = ? AND classificacao IS NOT NULL
+      GROUP BY classificacao
+    `).all(funilId);
+
+    // Reengajamentos da semana (nutricao que voltou para pipeline ativo)
+    const reengajamentos = db.prepare(`
+      SELECT COUNT(*) as total FROM pipeline_historico
+      WHERE estagio_anterior IN ('Recompra', 'Reconversao', 'Reengajamento')
+        AND criado_em >= datetime('now', '-7 days')
+    `).get() as any;
+
+    res.json({
+      total_ativos: totais.total,
+      valor_total: totais.valor_total,
+      ticket_medio: totais.ticket_medio,
+      ganhos_total: ganhos.total,
+      ganhos_valor: ganhos.valor,
+      taxa_conversao: Number(taxaConversao.toFixed(1)),
+      leads_em_risco: emRisco.total,
+      tempo_medio_fechamento: tempoMedio.dias ? Number(tempoMedio.dias.toFixed(1)) : null,
+      por_classificacao: porClassificacao,
+      reengajamentos_semana: reengajamentos.total,
+    });
   }
 
   excluir(req: Request, res: Response) {

@@ -8,10 +8,13 @@ import { MensageriaService } from '../services/mensageria.service';
 import { ClaudeService, MensagemChat } from '../services/claude.service';
 import { hojeLocal } from '../utils/timezone';
 import { EvolutionService } from '../services/evolution.service';
+import { InstagramService } from '../services/instagram.service';
+import { cachearMidiaPost, temCacheLocal } from '../services/instagramMidiaCache.service';
 
 const mensageriaService = new MensageriaService();
 const claudeService = new ClaudeService();
 const evolutionService = new EvolutionService();
+const instagramService = new InstagramService();
 const UPLOADS_DIR = path.resolve(__dirname, '../../../uploads');
 const AVATARS_DIR = path.resolve(UPLOADS_DIR, 'avatars');
 
@@ -59,9 +62,16 @@ export class MensageriaController {
     const params: any[] = [];
 
     if (canal && canal !== 'todos') {
-      query += ' AND c.canal = ?';
-      params.push(canal);
+      // Filtra conversas que TÊM pelo menos 1 mensagem do canal solicitado
+      // (suporta conversas unificadas onde cliente usou multiplos canais)
+      query += ` AND (c.canal = ? OR EXISTS (
+        SELECT 1 FROM mensagens m WHERE m.conversa_id = c.id AND m.canal_origem = ?
+      ))`;
+      params.push(canal, canal);
     }
+
+    // Filtrar conversas inativas (mescladas)
+    query += ' AND c.ativa = 1';
 
     // Excluir conversas internas quando vendo leads/clientes
     const excluirInterno = req.query.excluir_interno as string | undefined;
@@ -111,7 +121,8 @@ export class MensageriaController {
 
     const mensagens = db.prepare(
       `SELECT id, conversa_id, papel, conteudo, dados_extraidos, canal_origem,
-              meta_msg_id, status_envio, tipo_midia, midia_url, transcricao, criado_em
+              meta_msg_id, status_envio, tipo_midia, midia_url, transcricao,
+              instagram_media_id, criado_em
        FROM mensagens WHERE conversa_id = ? ORDER BY criado_em ASC`
     ).all(req.params.id);
 
@@ -129,7 +140,44 @@ export class MensageriaController {
       } catch {}
     }
 
-    res.json({ conversa, mensagens, dadosExtraidos });
+    // Coletar todos os media_ids distintos referenciados nas mensagens (comentários + DMs reply-to)
+    const conv = conversa as any;
+    const mediaIds = new Set<string>();
+    for (const m of mensagens as any[]) {
+      if (m.instagram_media_id) mediaIds.add(m.instagram_media_id);
+    }
+    // Backward-compat: se a conversa tem mediaId no header (legado) também inclui
+    if (conv?.instagram_media_id) mediaIds.add(conv.instagram_media_id);
+
+    // Buscar metadados de cada post e montar map por ig_media_id
+    const instagramPosts: Record<string, any> = {};
+    for (const mid of mediaIds) {
+      const post = instagramService.obterPostPorMediaId(mid);
+      if (post) {
+        // Prefere URL local (cache) sobre URL do CDN — evita expiração em 24h dos stories
+        const postComLocal = {
+          ...post,
+          thumbnail_url: post.thumbnail_url_local || post.thumbnail_url,
+          media_url: post.media_url_local || post.media_url,
+          thumbnail_url_remota: post.thumbnail_url,
+          media_url_remota: post.media_url,
+        };
+        instagramPosts[mid] = postComLocal;
+        if (!post.permalink) {
+          instagramService.sincronizarPost(mid, conv?.instagram_conta_id).catch(() => {});
+        }
+      } else {
+        // sem registro ainda — dispara sync para próxima leitura
+        instagramService.sincronizarPost(mid, conv?.instagram_conta_id).catch(() => {});
+      }
+    }
+
+    // instagramPost (campo legado) — usa media_id da conversa, se existir
+    const instagramPost = conv?.instagram_media_id
+      ? instagramPosts[conv.instagram_media_id] || null
+      : null;
+
+    res.json({ conversa, mensagens, dadosExtraidos, instagramPost, instagramPosts });
   }
 
   // POST /api/mensageria/conversas/:id/mensagens
@@ -360,6 +408,28 @@ export class MensageriaController {
     }
   }
 
+  // DELETE /api/mensageria/conversas - Apaga TODAS as conversas e mensagens
+  excluirTodasConversas(_req: Request, res: Response) {
+    try {
+      const db = getDb();
+
+      const totalConversas = (db.prepare('SELECT COUNT(*) AS n FROM conversas').get() as any).n;
+      const msgsResult = db.prepare('DELETE FROM mensagens').run();
+      db.prepare('DELETE FROM conversas').run();
+
+      // Reset SDR em batch (um único saveDb no fim, não por telefone)
+      try { db.prepare('DELETE FROM kommo_sdr_conversas').run(); } catch {}
+      try { db.prepare('DELETE FROM kommo_telefone_lead').run(); } catch {}
+
+      saveDb();
+      console.log(`[Mensageria] ${totalConversas} conversas e ${msgsResult.changes} mensagens apagadas (todas).`);
+      res.json({ ok: true, conversas: totalConversas, mensagens: msgsResult.changes });
+    } catch (e: any) {
+      console.error('[Mensageria] Erro ao apagar todas:', e);
+      res.status(500).json({ erro: e.message });
+    }
+  }
+
   // DELETE /api/mensageria/conversas/:id/mensagens - Limpa mensagens de uma conversa
   limparMensagens(req: Request, res: Response) {
     try {
@@ -445,6 +515,99 @@ export class MensageriaController {
   }
 
   // POST /api/mensageria/sync-fotos
+  async sincronizarInstagramViaUnipile(_req: Request, res: Response) {
+    try {
+      const r = await mensageriaService.sincronizarContatosInstagramViaUnipile();
+      res.json({ ok: true, ...r });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, erro: e.message });
+    }
+  }
+
+  async sincronizarInstagramViaMeta(_req: Request, res: Response) {
+    try {
+      const r = await mensageriaService.sincronizarContatosInstagramViaMeta();
+      res.json({ ok: true, ...r });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, erro: e.message });
+    }
+  }
+
+  async backfillInstagramMediaId(_req: Request, res: Response) {
+    try {
+      const r = await mensageriaService.backfillInstagramMediaId();
+      res.json({ ok: true, ...r });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, erro: e.message });
+    }
+  }
+
+  /**
+   * Baixa e cacheia localmente todas as mídias (thumbnail/media_url) dos posts/stories
+   * já registrados em instagram_posts. Importante para preservar imagens de stories
+   * que expiram em 24h no CDN do Instagram.
+   */
+  async cachearMidiasInstagram(_req: Request, res: Response) {
+    try {
+      const db = getDb();
+      const posts = db.prepare(
+        `SELECT ig_media_id, thumbnail_url, media_url, thumbnail_url_local, media_url_local
+         FROM instagram_posts
+         WHERE thumbnail_url IS NOT NULL OR media_url IS NOT NULL`
+      ).all() as any[];
+
+      let baixados = 0;
+      let pulados = 0;
+      let erros = 0;
+
+      for (const p of posts) {
+        // Pula se já tem cache local válido
+        const ja = temCacheLocal(p.ig_media_id);
+        if (ja.thumb || ja.media) {
+          // Sincroniza referência no banco caso não esteja salva
+          if ((!p.thumbnail_url_local && ja.thumb) || (!p.media_url_local && ja.media)) {
+            db.prepare(
+              `UPDATE instagram_posts SET thumbnail_url_local = ?, media_url_local = ? WHERE ig_media_id = ?`
+            ).run(ja.thumb || p.thumbnail_url_local, ja.media || p.media_url_local, p.ig_media_id);
+          }
+          pulados++;
+          continue;
+        }
+
+        try {
+          const { thumbnail_url_local, media_url_local } = await cachearMidiaPost(p.ig_media_id, {
+            thumbnail_url: p.thumbnail_url,
+            media_url: p.media_url,
+          });
+          if (thumbnail_url_local || media_url_local) {
+            db.prepare(
+              `UPDATE instagram_posts SET thumbnail_url_local = ?, media_url_local = ? WHERE ig_media_id = ?`
+            ).run(thumbnail_url_local, media_url_local, p.ig_media_id);
+            baixados++;
+          } else {
+            erros++;
+          }
+        } catch {
+          erros++;
+        }
+      }
+
+      saveDb();
+      res.json({ ok: true, total: posts.length, baixados, pulados, erros });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, erro: e.message });
+    }
+  }
+
+  async mesclarConversasDuplicadas(_req: Request, res: Response) {
+    try {
+      const r = await mensageriaService.mesclarConversasDuplicadas();
+      res.json({ ok: true, ...r });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, erro: e.message });
+    }
+  }
+
   async syncFotosPerfil(req: Request, res: Response) {
     if (!evolutionService.isConnected()) {
       return res.status(400).json({ erro: 'WhatsApp nao conectado' });

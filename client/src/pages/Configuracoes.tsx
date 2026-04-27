@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Shield, Users, Plus, Lock } from 'lucide-react';
+import { useEffect, useState, lazy, Suspense } from 'react';
+import { Shield, Users, Plus, Lock, Settings, Bot, Smartphone, Zap } from 'lucide-react';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -8,11 +8,24 @@ import { Input } from '../components/ui/Input';
 import { ApiKeysForm } from '../components/config/ApiKeysForm';
 import { InstagramContasForm } from '../components/config/InstagramContasForm';
 import { MetaApiForm } from '../components/config/MetaApiForm';
-import { ManyChatForm } from '../components/config/ManyChatForm';
+import { UnipileForm } from '../components/config/UnipileForm';
 import { FusoHorarioForm } from '../components/config/FusoHorarioForm';
 import { Tooltip } from '../components/ui/Tooltip';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+
+const AgentesIA = lazy(() => import('./AgentesIA'));
+const WhatsAppPage = lazy(() => import('./WhatsApp'));
+const Simulador = lazy(() => import('./Simulador'));
+
+const ABAS = [
+  { id: 'geral', label: 'Geral', icon: Settings },
+  { id: 'agentes', label: 'Agentes IA', icon: Bot },
+  { id: 'whatsapp', label: 'WhatsApp', icon: Smartphone },
+  { id: 'simulador', label: 'Simulador', icon: Zap },
+] as const;
+
+type AbaId = typeof ABAS[number]['id'];
 
 interface Usuario {
   id: string;
@@ -23,8 +36,9 @@ interface Usuario {
   criado_em: string;
 }
 
-export default function Configuracoes() {
+export default function Configuracoes({ abaInicial }: { abaInicial?: AbaId }) {
   const { usuario } = useAuth();
+  const [abaAtiva, setAbaAtiva] = useState<AbaId>(abaInicial || 'geral');
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [modalAberto, setModalAberto] = useState(false);
   const [form, setForm] = useState({ nome: '', email: '', senha: '', papel: 'vendedor' });
@@ -77,10 +91,46 @@ export default function Configuracoes() {
     }
   };
 
+  const LoadingFallback = (
+    <div className="flex items-center justify-center py-20">
+      <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-alisson-600" />
+    </div>
+  );
+
   return (
     <div>
-      <h1 className="hidden md:block text-2xl font-bold text-alisson-600 mb-6">Configuracoes</h1>
+      <h1 className="hidden md:block text-2xl font-bold text-alisson-600 mb-4">Configuracoes</h1>
 
+      {/* Abas */}
+      <div className="flex gap-1 mb-6 overflow-x-auto pb-1 scrollbar-thin">
+        {ABAS.map((aba) => (
+          <button
+            key={aba.id}
+            onClick={() => setAbaAtiva(aba.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+              abaAtiva === aba.id
+                ? 'bg-alisson-600 text-white shadow-sm'
+                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            <aba.icon size={16} />
+            {aba.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Conteudo das abas */}
+      {abaAtiva === 'agentes' && (
+        <Suspense fallback={LoadingFallback}><AgentesIA /></Suspense>
+      )}
+      {abaAtiva === 'whatsapp' && (
+        <Suspense fallback={LoadingFallback}><WhatsAppPage /></Suspense>
+      )}
+      {abaAtiva === 'simulador' && (
+        <Suspense fallback={LoadingFallback}><Simulador /></Suspense>
+      )}
+
+      {abaAtiva === 'geral' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Profile */}
         <Card className="p-4 md:p-6">
@@ -205,13 +255,14 @@ export default function Configuracoes() {
           </div>
         )}
 
-        {/* ManyChat - admin only */}
+        {/* Unipile - admin only */}
         {isAdmin && (
           <div className="lg:col-span-2">
-            <ManyChatForm />
+            <UnipileForm />
           </div>
         )}
       </div>
+      )}
 
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Novo Usuario">
         <div className="space-y-4">

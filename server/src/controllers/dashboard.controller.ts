@@ -103,4 +103,113 @@ export class DashboardController {
     const dados = db.prepare(query).all();
     res.json(dados);
   }
+
+  rankingClientes(req: Request, res: Response) {
+    const db = getDb();
+    const ordem = (req.query.ordem as string) || 'valor_total';
+    const limite = Number(req.query.limite) || 20;
+
+    const ordensValidas: Record<string, string> = {
+      valor_total: 'valor_total DESC',
+      quantidade: 'total_compras DESC',
+      ticket_medio: 'ticket_medio DESC',
+      recente: 'ultima_compra DESC',
+    };
+
+    const orderBy = ordensValidas[ordem] || 'valor_total DESC';
+
+    const query = `
+      SELECT
+        c.id,
+        c.nome,
+        c.telefone,
+        c.email,
+        c.cidade,
+        c.estado,
+        COUNT(v.id) as total_compras,
+        COALESCE(SUM(v.valor), 0) as valor_total,
+        COALESCE(AVG(v.valor), 0) as ticket_medio,
+        MAX(v.data_venda) as ultima_compra,
+        MIN(v.data_venda) as primeira_compra
+      FROM clientes c
+      JOIN vendas v ON v.cliente_id = c.id
+      WHERE v.estornada IS NULL OR v.estornada = 0
+      GROUP BY c.id
+      ORDER BY ${orderBy}
+      LIMIT ?
+    `;
+
+    const dados = db.prepare(query).all(limite);
+    res.json(dados);
+  }
+
+  indicadoresClientes(_req: Request, res: Response) {
+    const db = getDb();
+
+    const totais = db.prepare(`
+      SELECT
+        COUNT(DISTINCT v.cliente_id) as clientes_compradores,
+        COUNT(v.id) as total_vendas,
+        COALESCE(SUM(v.valor), 0) as valor_total,
+        COALESCE(AVG(v.valor), 0) as ticket_medio_geral
+      FROM vendas v
+      WHERE v.estornada IS NULL OR v.estornada = 0
+    `).get() as any;
+
+    const recorrentes = db.prepare(`
+      SELECT COUNT(*) as total FROM (
+        SELECT cliente_id FROM vendas
+        WHERE estornada IS NULL OR estornada = 0
+        GROUP BY cliente_id
+        HAVING COUNT(*) > 1
+      )
+    `).get() as any;
+
+    const porMes = db.prepare(`
+      SELECT
+        strftime('%Y-%m', v.data_venda) as mes,
+        COUNT(DISTINCT v.cliente_id) as clientes_unicos,
+        COUNT(v.id) as vendas,
+        COALESCE(SUM(v.valor), 0) as valor
+      FROM vendas v
+      WHERE v.estornada IS NULL OR v.estornada = 0
+        AND v.data_venda >= date('now', '-12 months')
+      GROUP BY mes
+      ORDER BY mes
+    `).all();
+
+    const faixas = db.prepare(`
+      SELECT
+        CASE
+          WHEN total <= 1000 THEN 'Ate R$1.000'
+          WHEN total <= 5000 THEN 'R$1.000 - R$5.000'
+          WHEN total <= 15000 THEN 'R$5.000 - R$15.000'
+          WHEN total <= 50000 THEN 'R$15.000 - R$50.000'
+          ELSE 'Acima de R$50.000'
+        END as faixa,
+        COUNT(*) as clientes,
+        SUM(total) as valor_total
+      FROM (
+        SELECT cliente_id, SUM(valor) as total
+        FROM vendas
+        WHERE estornada IS NULL OR estornada = 0
+        GROUP BY cliente_id
+      )
+      GROUP BY faixa
+      ORDER BY MIN(total)
+    `).all();
+
+    res.json({
+      clientes_compradores: totais.clientes_compradores,
+      total_vendas: totais.total_vendas,
+      valor_total: totais.valor_total,
+      ticket_medio_geral: totais.ticket_medio_geral,
+      clientes_recorrentes: recorrentes.total,
+      taxa_recorrencia: totais.clientes_compradores > 0
+        ? (recorrentes.total / totais.clientes_compradores * 100).toFixed(1)
+        : 0,
+      vendas_por_mes: porMes,
+      faixas_valor: faixas,
+    });
+  }
 }

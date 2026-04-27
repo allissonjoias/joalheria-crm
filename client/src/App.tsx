@@ -5,19 +5,9 @@ import { AjudaCrmWidget } from './components/ui/AjudaCrmWidget';
 import { InstallPrompt } from './components/pwa/InstallPrompt';
 import { PushNotificationPrompt } from './components/pwa/PushNotifications';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
 import Mensageria from './pages/Mensageria';
-import Clientes from './pages/Clientes';
-import Produtos from './pages/Produtos';
 import Pipeline from './pages/Pipeline';
-import Vendas from './pages/Vendas';
-import Lembretes from './pages/Lembretes';
 import Configuracoes from './pages/Configuracoes';
-import WhatsAppPage from './pages/WhatsApp';
-import AgentesIA from './pages/AgentesIA';
-import Simulador from './pages/Simulador';
-import SimuladorMeta from './pages/SimuladorMeta';
-import Automacoes from './pages/Automacoes';
 
 export default function App() {
   return (
@@ -26,24 +16,24 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route element={<Layout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/pipeline" element={<Pipeline />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/produtos" element={<Produtos />} />
-            <Route path="/vendas" element={<Vendas />} />
+            <Route path="/" element={<Navigate to="/mensagens" replace />} />
             <Route path="/mensagens" element={<Mensageria />} />
-            <Route path="/lembretes" element={<Lembretes />} />
-            <Route path="/agentes-ia" element={<AgentesIA />} />
-            <Route path="/whatsapp" element={<WhatsAppPage />} />
+            <Route path="/pipeline" element={<Pipeline />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
-            <Route path="/simulador" element={<Simulador />} />
-            <Route path="/simulador-meta" element={<SimuladorMeta />} />
-            <Route path="/automacoes" element={<Automacoes />} />
+            <Route path="/agentes-ia" element={<Configuracoes abaInicial="agentes" />} />
+            <Route path="/whatsapp" element={<Configuracoes abaInicial="whatsapp" />} />
+            <Route path="/automacoes" element={<Navigate to="/configuracoes" replace />} />
+            <Route path="/simulador" element={<Configuracoes abaInicial="simulador" />} />
             {/* Redirects */}
-            <Route path="/chat" element={<Navigate to="/agentes-ia" replace />} />
-            <Route path="/sdr-agent" element={<Navigate to="/agentes-ia" replace />} />
-            <Route path="/ponto" element={<Navigate to="/" replace />} />
-            <Route path="/equipe" element={<Navigate to="/" replace />} />
+            <Route path="/clientes" element={<Navigate to="/pipeline" replace />} />
+            <Route path="/produtos" element={<Navigate to="/pipeline" replace />} />
+            <Route path="/vendas" element={<Navigate to="/pipeline" replace />} />
+            <Route path="/lembretes" element={<Navigate to="/pipeline" replace />} />
+            <Route path="/chat" element={<Navigate to="/mensagens" replace />} />
+            <Route path="/sdr-agent" element={<Navigate to="/configuracoes" replace />} />
+            <Route path="/simulador-meta" element={<Navigate to="/configuracoes" replace />} />
+            <Route path="/ponto" element={<Navigate to="/mensagens" replace />} />
+            <Route path="/equipe" element={<Navigate to="/mensagens" replace />} />
           </Route>
         </Routes>
         <AjudaCrmWidget />

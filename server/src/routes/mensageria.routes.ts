@@ -6,8 +6,14 @@ const router = Router();
 const controller = new MensageriaController();
 
 router.post('/sync-fotos', (req, res) => controller.syncFotosPerfil(req, res));
+router.post('/sync-instagram-unipile', (req, res) => controller.sincronizarInstagramViaUnipile(req, res));
+router.post('/sync-instagram-meta', (req, res) => controller.sincronizarInstagramViaMeta(req, res));
+router.post('/backfill-ig-media-id', (req, res) => controller.backfillInstagramMediaId(req, res));
+router.post('/mesclar-duplicadas', (req, res) => controller.mesclarConversasDuplicadas(req, res));
+router.post('/cachear-midias-ig', (req, res) => controller.cachearMidiasInstagram(req, res));
 
 router.get('/conversas', (req, res) => controller.listarConversas(req, res));
+router.delete('/conversas', (req, res) => controller.excluirTodasConversas(req, res));
 router.post('/conversas/interna', (req, res) => controller.criarConversaInterna(req, res));
 router.get('/conversas/:id', (req, res) => controller.obterConversa(req, res));
 router.delete('/conversas/:id', (req, res) => controller.excluirConversa(req, res));

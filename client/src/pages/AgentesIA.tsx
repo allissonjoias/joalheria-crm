@@ -763,7 +763,7 @@ function QualificacaoLocalPanel() {
                   return (
                     <tr key={l.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="py-2.5 px-2 font-mono text-xs text-gray-700">{l.telefone ? `...${l.telefone.slice(-4)}` : '-'}</td>
-                      <td className="py-2.5 px-2"><span className={`font-bold ${sc}`}>{l.lead_score}</span><span className="text-gray-400 text-xs">/150</span></td>
+                      <td className="py-2.5 px-2"><span className={`font-bold ${sc}`}>{l.lead_score}</span><span className="text-gray-400 text-xs">/100</span></td>
                       <td className="py-2.5 px-2"><span className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${cor.bg} ${cor.text}`}>{cor.icon}{l.classificacao}</span></td>
                       <td className="py-2.5 px-2 text-xs text-gray-600 max-w-[120px] truncate">{l.bant_need || <span className="text-gray-300">-</span>}{l.bant_need_score > 0 && <span className="text-alisson-500 ml-1">({l.bant_need_score})</span>}</td>
                       <td className="py-2.5 px-2 text-xs text-gray-600">{l.bant_budget || <span className="text-gray-300">-</span>}{l.bant_budget_score > 0 && <span className="text-alisson-500 ml-1">({l.bant_budget_score})</span>}</td>

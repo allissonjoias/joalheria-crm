@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getDb } from '../config/database';
 import { env } from '../config/env';
+import { cachearMidiaPost, temCacheLocal } from './instagramMidiaCache.service';
 
 const GRAPH_API = 'https://graph.facebook.com/v22.0';
 
@@ -224,6 +225,99 @@ export class InstagramService {
       'SELECT * FROM instagram_contas WHERE page_id = ? AND ativo = 1'
     ).get(pageId) as InstagramConta | undefined;
     return conta || null;
+  }
+
+  /**
+   * Busca metadados do post via Graph API e atualiza instagram_posts.
+   * Retorna o registro atualizado ou null se nao foi possivel buscar.
+   */
+  async sincronizarPost(mediaId: string, contaId?: string): Promise<any | null> {
+    if (!mediaId) return null;
+    const db = getDb();
+
+    // Tem dados frescos no banco? (atualizado nas ultimas 6h)
+    const existente = db.prepare('SELECT * FROM instagram_posts WHERE ig_media_id = ?').get(mediaId) as any;
+    if (existente?.permalink && existente?.atualizado_em) {
+      const idadeMs = Date.now() - new Date(existente.atualizado_em + 'Z').getTime();
+      if (idadeMs < 6 * 60 * 60 * 1000) return existente;
+    }
+
+    // Resolver token: da conta especifica ou da primeira ativa
+    let accessToken: string | null = null;
+    if (contaId) {
+      const c = this.obterConta(contaId);
+      accessToken = c?.access_token || null;
+    }
+    if (!accessToken) {
+      const ativa = db.prepare('SELECT access_token FROM instagram_contas WHERE ativo = 1 ORDER BY criado_em DESC LIMIT 1').get() as any;
+      accessToken = ativa?.access_token || null;
+    }
+    if (!accessToken) return existente || null;
+
+    try {
+      const fields = 'id,permalink,media_url,thumbnail_url,caption,media_type,media_product_type';
+      const url = `${GRAPH_API}/${mediaId}?fields=${fields}&access_token=${accessToken}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.warn(`[Instagram] Falha ao buscar post ${mediaId}: ${res.status}`);
+        return existente || null;
+      }
+      const data = await res.json() as any;
+
+      const tipo = (data.media_product_type === 'REELS' ? 'reel' :
+        data.media_product_type === 'STORY' ? 'story' : 'post');
+
+      if (existente) {
+        db.prepare(
+          `UPDATE instagram_posts SET
+            tipo = ?, caption = ?, permalink = ?, media_product_type = ?,
+            media_url = ?, thumbnail_url = ?, atualizado_em = datetime('now', 'localtime')
+          WHERE ig_media_id = ?`
+        ).run(
+          tipo, data.caption || null, data.permalink || null,
+          data.media_product_type || null, data.media_url || null, data.thumbnail_url || null,
+          mediaId
+        );
+      } else {
+        db.prepare(
+          `INSERT INTO instagram_posts (id, ig_media_id, tipo, caption, permalink, media_product_type, media_url, thumbnail_url, atualizado_em)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))`
+        ).run(
+          uuidv4(), mediaId, tipo, data.caption || null, data.permalink || null,
+          data.media_product_type || null, data.media_url || null, data.thumbnail_url || null
+        );
+      }
+
+      // ─── Cache local: baixa mídia e thumbnail (importante pra stories que expiram em 24h) ───
+      // Roda apenas se ainda não cacheou (evita re-baixar a cada sync)
+      const jaCacheado = temCacheLocal(mediaId);
+      if (!jaCacheado.thumb && !jaCacheado.media) {
+        cachearMidiaPost(mediaId, {
+          thumbnail_url: data.thumbnail_url,
+          media_url: data.media_url,
+        }).then(({ thumbnail_url_local, media_url_local }) => {
+          try {
+            const dbInner = getDb();
+            dbInner.prepare(
+              `UPDATE instagram_posts SET thumbnail_url_local = ?, media_url_local = ? WHERE ig_media_id = ?`
+            ).run(thumbnail_url_local, media_url_local, mediaId);
+            console.log(`[IG Cache] post ${mediaId}: thumb=${!!thumbnail_url_local} media=${!!media_url_local}`);
+          } catch (e: any) {
+            console.warn('[IG Cache] erro ao salvar URL local:', e.message);
+          }
+        }).catch(err => console.warn('[IG Cache] falhou:', err?.message));
+      }
+
+      return db.prepare('SELECT * FROM instagram_posts WHERE ig_media_id = ?').get(mediaId);
+    } catch (e: any) {
+      console.warn(`[Instagram] Erro sincronizando post ${mediaId}:`, e.message);
+      return existente || null;
+    }
+  }
+
+  obterPostPorMediaId(mediaId: string): any | null {
+    const db = getDb();
+    return db.prepare('SELECT * FROM instagram_posts WHERE ig_media_id = ?').get(mediaId) || null;
   }
 
   // Busca conta por ig_user_id
