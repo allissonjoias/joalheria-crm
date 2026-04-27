@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    @apply h-full;
+  }
+  body {
+    @apply bg-creme-200 text-alisson-800 antialiased;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-alisson-600 text-white px-4 py-2 rounded-lg
+           hover:bg-alisson-700 active:bg-alisson-800
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+  }
+  .btn-secondary {
+    @apply bg-creme-100 text-alisson-700 px-4 py-2 rounded-lg
+           border border-alisson-200
+           hover:bg-creme-200 transition-colors;
+  }
+  .input-field {
+    @apply w-full px-3 py-2 rounded-lg border border-alisson-200
+           bg-white text-alisson-800
+           focus:outline-none focus:ring-2 focus:ring-alisson-500 focus:border-alisson-500;
+  }
+  .card {
+    @apply bg-white rounded-xl shadow-sm p-6;
+  }
+}
